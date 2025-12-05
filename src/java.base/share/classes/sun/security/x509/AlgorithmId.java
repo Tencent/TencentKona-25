@@ -672,4 +672,7 @@ public class AlgorithmId implements Serializable, DerEncoder {
             ObjectIdentifier.of(KnownOIDs.SHA3_384withRSA);
     public static final ObjectIdentifier SHA3_512withRSA_oid =
             ObjectIdentifier.of(KnownOIDs.SHA3_512withRSA);
+
+    public static final ObjectIdentifier SM3withSM2_OID =
+            ObjectIdentifier.of(KnownOIDs.SM3withSM2);
 }

@@ -127,6 +127,7 @@ public final class SunJCE extends Provider {
         super("SunJCE", PROVIDER_VER, info);
 
         putEntries();
+        SMEntries.putEntries(SunJCE.this);
 
         if (instance == null) {
             instance = this;

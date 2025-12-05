@@ -57,5 +57,7 @@ public final class Sun extends Provider {
         while (serviceIter.hasNext()) {
             putService(serviceIter.next());
         }
+
+        SMEntries.putEntries(Sun.this);
     }
 }

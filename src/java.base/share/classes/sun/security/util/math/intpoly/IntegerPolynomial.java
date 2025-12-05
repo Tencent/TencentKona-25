@@ -68,7 +68,8 @@ public abstract sealed class IntegerPolynomial implements IntegerFieldModuloP
             MontgomeryIntegerPolynomialP256, IntegerPolynomialP384,
             IntegerPolynomialP521, IntegerPolynomialModBinP, P256OrderField,
             P384OrderField, P521OrderField, Curve25519OrderField,
-            Curve448OrderField {
+            Curve448OrderField,
+            IntegerPolynomialSM2, SM2OrderField {
 
     protected static final BigInteger TWO = BigInteger.valueOf(2);
 
@@ -869,4 +870,3 @@ public abstract sealed class IntegerPolynomial implements IntegerFieldModuloP
         }
     }
 }
-

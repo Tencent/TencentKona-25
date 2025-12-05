@@ -121,7 +121,9 @@ public final class SunEC extends Provider {
                     } else if (algo.equals("SHA3-512withECDSA")) {
                         return (inP1363? new ECDSASignature.SHA3_512inP1363Format() :
                             new ECDSASignature.SHA3_512());
-                     }
+                    } else if (algo.equals("SM3withSM2")) {
+                        return new SM2Signature();
+                    }
                 } else if (type.equals("KeyFactory")) {
                     if (algo.equals("EC")) {
                         return new ECKeyFactory();
@@ -137,6 +139,8 @@ public final class SunEC extends Provider {
                         return new EdDSAKeyFactory.Ed25519();
                     } else if (algo.equalsIgnoreCase("Ed448")) {
                         return new EdDSAKeyFactory.Ed448();
+                    } else if (algo.equals("SM2")) {
+                        return new SM2KeyFactory();
                     }
                 } else  if (type.equals("AlgorithmParameters")) {
                     if (algo.equals("EC")) {
@@ -167,6 +171,12 @@ public final class SunEC extends Provider {
                         return new XDHKeyAgreement.X25519();
                     } else if (algo.equals("X448")) {
                         return new XDHKeyAgreement.X448();
+                    } else if (algo.equals("SM2")) {
+                        return new SM2KeyAgreement();
+                    }
+                } else if (type.equals("Cipher")) {
+                    if (algo.equals("SM2")) {
+                        return new SM2Cipher();
                     }
                 }
             } catch (Exception ex) {
@@ -181,6 +191,7 @@ public final class SunEC extends Provider {
     public SunEC() {
         super("SunEC", PROVIDER_VER, "Sun Elliptic Curve provider");
         putEntries();
+        putSMEntries();
     }
 
     void putEntries() {
@@ -372,5 +383,20 @@ public final class SunEC extends Provider {
         putService(new ProviderServiceA(this, "Signature",
             "Ed448", "sun.security.ec.ed.EdDSASignature.Ed448", ATTRS));
 
+    }
+
+    // ShangMi entries
+    private void putSMEntries() {
+        HashMap<String, String> ATTRS = new HashMap<>(1);
+        ATTRS.put("ImplementedIn", "Software");
+
+        putService(new ProviderService(this, "KeyFactory",
+                "SM2", "sun.security.ec.SM2KeyFactory", null, ATTRS));
+        putService(new ProviderService(this, "Signature",
+                "SM3withSM2", "sun.security.ec.SM2Signature", List.of("SM2"), ATTRS));
+        putService(new ProviderService(this, "KeyAgreement",
+                "SM2", "sun.security.ec.SM2KeyAgreement", null, ATTRS));
+        putService(new ProviderService(this, "Cipher",
+                "SM2", "sun.security.ec.SM2Cipher", null, ATTRS));
     }
 }

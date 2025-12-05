@@ -29,15 +29,19 @@ import sun.security.ec.point.*;
 import sun.security.util.CurveDB;
 import sun.security.util.KnownOIDs;
 import sun.security.util.ArrayUtil;
+import sun.security.util.SMUtil;
 import sun.security.util.math.*;
 import sun.security.util.math.intpoly.*;
 
 import java.math.BigInteger;
+import java.security.MessageDigest;
 import java.security.ProviderException;
+import java.security.SecureRandom;
 import java.security.spec.ECFieldFp;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 import java.security.spec.EllipticCurve;
+import java.security.spec.SM2ParameterSpec;
 import java.util.Map;
 import java.util.Optional;
 
@@ -58,6 +62,10 @@ public class ECOperations {
         private static final long serialVersionUID = 1;
     }
 
+    public static final ECOperations SM2OPS = new ECOperations(
+            IntegerPolynomialSM2.ONE.getElement(SM2ParameterSpec.CURVE.getB()),
+            SM2OrderField.ONE);
+
     static final Map<BigInteger, IntegerFieldModuloP> fields = Map.of(
         IntegerPolynomialP256.MODULUS, MontgomeryIntegerPolynomialP256.ONE,
         IntegerPolynomialP384.MODULUS, IntegerPolynomialP384.ONE,
@@ -71,6 +79,9 @@ public class ECOperations {
     );
 
     public static Optional<ECOperations> forParameters(ECParameterSpec params) {
+        if (SM2OrderField.MODULUS.equals(params.getOrder())) {
+            return Optional.of(SM2OPS);
+        }
 
         EllipticCurve curve = params.getCurve();
         if (!(curve.getField() instanceof ECFieldFp primeField)) {
@@ -224,6 +235,13 @@ public class ECOperations {
      */
     public MutablePoint multiply(ECPoint ecPoint, byte[] s) {
         return multiply(AffinePoint.fromECPoint(ecPoint, getField()), s);
+    }
+
+    public ProjectivePoint.Mutable toMutablePoint(ECPoint ecPoint) {
+        IntegerFieldModuloP field = getField();
+        ProjectivePoint.Mutable mutable = new ProjectivePoint.Mutable(field);
+        mutable.setValue(AffinePoint.fromECPoint(ecPoint, field));
+        return mutable;
     }
 
     /*
@@ -542,6 +560,53 @@ public class ECOperations {
                 ecOps.setDouble(p, t0, t1, t2, t3, t4);
             }
         }
+    }
+
+    // SM2_KEY_CAP = order - 1 in little-endian
+    private static final byte[] SM2_KEY_CAP = SMUtil.hexToBytesLE(
+            "FFFFFFFEFFFFFFFFFFFFFFFFFFFFFFFF7203DF6B21C6052B53BBF40939D54122");
+
+    public byte[] generatePrivateScalar(SecureRandom random) {
+        byte[] privArr = generatePrivateScalar0(random);
+
+        // For curveSM2, if the privArr is order - 1, just try once again.
+        if (orderField == SM2OrderField.ONE
+                && MessageDigest.isEqual(SM2_KEY_CAP, privArr)) {
+            // It should unlikely get here
+            privArr = generatePrivateScalar0(random);
+        }
+
+        return privArr;
+    }
+
+    private byte[] generatePrivateScalar0(SecureRandom random) {
+        // Attempt to create the private scalar in a loop that uses new random
+        // input each time. The chance of failure is very small assuming the
+        // implementation derives the nonce using extra bits
+        int seedSize = (orderField.getSize().bitLength() + 64 + 7) / 8;
+        byte[] seedArr = new byte[seedSize];
+        int numAttempts = 128;
+        for (int i = 0; i < numAttempts; i++) {
+            random.nextBytes(seedArr);
+            try {
+                return seedToScalar(seedArr);
+            } catch (IntermediateValueException ex) {
+                // try again in the next iteration
+            }
+        }
+
+        throw new ProviderException("Unable to produce private key after "
+                                         + numAttempts + " attempts");
+    }
+
+    public static ECPoint toECPoint(AffinePoint affPoint) {
+        return new ECPoint(
+                affPoint.getX().asBigInteger(),
+                affPoint.getY().asBigInteger());
+    }
+
+    public static boolean isInfinitePoint(AffinePoint affPoint) {
+        return affPoint.getX() == null || affPoint.getY() == null;
     }
 
     // Represents a multiplier with a larger precomputed table. Intended to be

@@ -185,10 +185,7 @@ public final class ECKeyPairGenerator extends KeyPairGeneratorSpi {
         }
         ECOperations ops = opsOpt.get();
         IntegerFieldModuloP field = ops.getField();
-        int numBits = ecParams.getOrder().bitLength();
-        int seedBits = numBits + 64;
-        int seedSize = (seedBits + 7) / 8;
-        byte[] privArr = generatePrivateScalar(random, ops, seedSize);
+        byte[] privArr = ops.generatePrivateScalar(random);
 
         ECPrivateKeyImpl privateKey = new ECPrivateKeyImpl(privArr, ecParams);
         Arrays.fill(privArr, (byte)0);
