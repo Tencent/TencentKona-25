@@ -19,10 +19,10 @@
 
 /*
  * @test
- * @summary The EC key pair generator based on OpenSSL.
+ * @summary The SM3 message digest based on OpenSSL FFM downcalls.
  * @library /test/lib /test/jdk/openssl
  * @run junit/othervm NativeSM3Test
- * @run junit/othervm -Djdk.sun.enableNativeCrypto=true NativeSM3Test
+ * @run junit/othervm --enable-native-access=java.base -Djdk.sun.enableNativeCrypto=true NativeSM3Test
  */
 
 import org.junit.jupiter.api.Assertions;
