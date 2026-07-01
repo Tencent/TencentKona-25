@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022, 2024, Tencent. All rights reserved.
+ * Copyright (C) 2022, 2026, Tencent. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify
@@ -12,10 +12,6 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License version 2 for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 package sun.security.provider;
@@ -26,6 +22,11 @@ import java.io.ByteArrayOutputStream;
  * The native SM3 engine.
  */
 public final class SM3EngineNative implements SM3Engine {
+
+    // Benchmark toggle: -Djdk.sun.sm3.useJNI=true selects the original JNI
+    // implementation; otherwise the FFM implementation is used (default).
+    private static final boolean USE_JNI =
+            Boolean.getBoolean("jdk.sun.sm3.useJNI");
 
     private ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 
@@ -52,7 +53,11 @@ public final class SM3EngineNative implements SM3Engine {
     // Not check the out bounds, because SM3MessageDigest already does that.
     public void doFinal(byte[] out, int outOffset) {
         byte[] message = buffer.toByteArray();
-        NativeSun.sm3Digest(message, out, outOffset);
+        if (USE_JNI) {
+            NativeSun.sm3Digest(message, out, outOffset);
+        } else {
+            NativeSunFFM.sm3Digest(message, out, outOffset);
+        }
         reset();
     }
 
