@@ -110,6 +110,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/vmThread.hpp"
@@ -633,6 +634,38 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t min_word_size,
   return result;
 }
 
+static void log_humongous_allocation_stack(size_t word_size, HeapWord* obj_addr) {
+  LogTarget(Debug, gc, humongous) lt;
+  if (!lt.is_enabled()) {
+    return;
+  }
+
+  ResourceMark rm;
+  Thread* const current = Thread::current();
+  JavaThread* const jt = current->is_Java_thread() ? JavaThread::cast(current) : nullptr;
+
+  const char* thread_label = current->name();
+  if (jt != nullptr) {
+    oop thread_oop = jt->vthread_or_thread();
+    thread_label = thread_oop != nullptr ? JavaThread::name_for(thread_oop) : jt->name();
+  }
+  const size_t object_size_bytes = word_size * HeapWordSize;
+
+  LogStream ls(lt);
+  ls.print_cr("Humongous object allocation (object size %zu @ " PTR_FORMAT ") thread %s",
+              object_size_bytes, p2i(obj_addr), thread_label);
+
+  if (jt == nullptr) {
+    return;
+  }
+
+  if (jt->is_vthread_mounted()) {
+    jt->print_vthread_stack_on(&ls);
+  } else {
+    jt->print_stack_on(&ls);
+  }
+}
+
 HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   ResourceMark rm; // For retrieving the thread names in log messages.
 
@@ -680,11 +713,15 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       if (result != nullptr) {
         policy()->old_gen_alloc_tracker()->
           add_allocated_humongous_bytes_since_last_gc(size_in_regions * G1HeapRegion::GrainBytes);
-        return result;
+      } else {
+        // Read the GC count while still holding the Heap_lock.
+        gc_count_before = total_collections();
       }
+    }
 
-      // Read the GC count while still holding the Heap_lock.
-      gc_count_before = total_collections();
+    if (result != nullptr) {
+      log_humongous_allocation_stack(word_size, result);
+      return result;
     }
 
     bool succeeded;
@@ -696,6 +733,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
         size_t size_in_regions = humongous_obj_size_in_regions(word_size);
         policy()->old_gen_alloc_tracker()->
           record_collection_pause_humongous_allocation(size_in_regions * G1HeapRegion::GrainBytes);
+        log_humongous_allocation_stack(word_size, result);
       }
       return result;
     }
