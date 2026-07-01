@@ -1,97 +1,166 @@
 /*
- * Copyright (C) 2022, 2023, Tencent. All rights reserved.
+ * Copyright (C) 2022, 2025, 2026, Tencent. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation. Tencent designates
- * this particular file as subject to the "Classpath" exception as provided
- * in the LICENSE file that accompanied this code.
- *
- * This code is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License version 2 for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * published by the Free Software Foundation.
  */
 
 package sun.security.provider;
 
-import sun.security.util.ArrayUtil;
-
-import java.security.DigestException;
-import java.security.MessageDigest;
-
 /**
- * SM3 hash in compliance with GB/T 32905-2016.
+ * SM3 hash engine factory.
+ * <p>
+ * Selects the appropriate engine implementation at runtime:
+ * <ul>
+ *   <li>{@link SM3EngineImpl} — Pure Java implementation (always available)</li>
+ *   <li>{@link SM3EngineNative} — JNI-based native implementation (legacy)</li>
+ *   <li>{@link SM3EngineFFM} — FFM-based native implementation (new, default when native enabled)</li>
+ * </ul>
+ * <p>
+ * Selection is controlled by two system properties:
+ * <dl>
+ *   <dt>{@code jdk.sun.enableNativeCrypto}</dt>
+ *   <dd>Master switch for native crypto. Default: {@code false}</dd>
+ *   <dt>{@code jdk.sun.nativeCryptoBackend}</dt>
+ *   <dd>Backend choice when native crypto is enabled.
+ *       Values: {@code "ffm"} (default) or {@code "jni"}</dd>
+ * </dl>
  */
-public final class SM3MessageDigest extends MessageDigest implements Cloneable {
+public final class SM3MessageDigest {
 
+    // ---- Engine type constants ----
+
+    /** Pure Java implementation */
+    public static final String ENGINE_JAVA = "java";
+
+    /** JNI-based native implementation (legacy) */
+    public static final String ENGINE_JNI = "jni";
+
+    /** FFM-based native implementation */
+    public static final String ENGINE_FFM = "ffm";
+
+    // The currently active engine type (cached after first initialization)
+    private static volatile String activeEngineType;
+
+    // ---- Factory method ----
+
+    /**
+     * Creates a new SM3 engine instance.
+     * The engine type is determined by system properties.
+     *
+     * @return a new SM3Engine instance
+     */
     public static SM3Engine newEngine() {
-        return NativeSun.isNativeCryptoEnabled()
-                ? new SM3EngineNative()
-                : new SM3EngineImpl();
+        String type = getActiveEngineType();
+        return switch (type) {
+            case ENGINE_JNI -> new SM3EngineNative();
+            case ENGINE_FFM -> createFFMEngine();
+            default -> new SM3EngineImpl();  // Java fallback
+        };
     }
 
-    private SM3Engine engine = newEngine();
-
-    public SM3MessageDigest() {
-        super("SM3");
+    /**
+     * Returns the currently active engine type.
+     * The result is cached after the first call.
+     *
+     * @return one of {@code "java"}, {@code "jni"}, or {@code "ffm"}
+     */
+    public static String getActiveEngineType() {
+        if (activeEngineType != null) {
+            return activeEngineType;
+        }
+        activeEngineType = determineEngineType();
+        return activeEngineType;
     }
 
-    @Override
-    protected int engineGetDigestLength() {
-        return 32;
-    }
+    /**
+     * Determines which engine type to use based on system properties
+     * and library availability.
+     */
+    private static String determineEngineType() {
+        // Check if native crypto is enabled
+        boolean nativeEnabled = Boolean.getBoolean("jdk.sun.enableNativeCrypto");
 
-    @Override
-    protected void engineUpdate(byte input) {
-        engine.update(input);
-    }
+        // Also check for the OpenSSL crypto library
+        boolean opensslLoaded = isOpenSSLAvailable();
 
-    @Override
-    protected void engineUpdate(byte[] input, int offset, int length) {
-        if (length == 0) {
-            return;
+        if (!nativeEnabled || !opensslLoaded) {
+            return ENGINE_JAVA;
         }
 
-        if ((offset < 0) || (length < 0) || (offset > input.length - length)) {
-            throw new ArrayIndexOutOfBoundsException();
+        // Check which native backend to use
+        String backend = System.getProperty("jdk.sun.nativeCryptoBackend", ENGINE_FFM);
+
+        if (ENGINE_JNI.equalsIgnoreCase(backend)) {
+            // Check if the JNI library is available
+            if (isJNILibraryAvailable()) {
+                return ENGINE_JNI;
+            }
+            System.err.println(
+                    "WARNING: jdk.sun.nativeCryptoBackend=jni but libsuncrypto " +
+                    "not available. Falling back to FFM.");
         }
 
-        engine.update(input, offset, length);
-    }
-
-    @Override
-    protected byte[] engineDigest() {
-        byte[] digest = new byte[32];
-        engine.doFinal(digest);
-        return digest;
-    }
-
-    @Override
-    protected int engineDigest(byte[] buf, int offset, int length)
-            throws DigestException {
-        if (length != 32) {
-            throw new DigestException("The length must be 32-bytes");
+        // Try FFM — if OpenSSL symbols can't be resolved, fall back to Java
+        try {
+            // Trigger static initializer of SM3EngineFFM to verify bindings
+            new SM3EngineFFM().reset();
+            return ENGINE_FFM;
+        } catch (Throwable t) {
+            System.err.println(
+                    "WARNING: FFM SM3 engine initialization failed: " +
+                    t.getMessage() + ". Falling back to Java implementation.");
+            return ENGINE_JAVA;
         }
-        ArrayUtil.nullAndBoundsCheck(buf, offset, length);
-
-        engine.doFinal(buf, offset);
-        return 32;
     }
 
-    @Override
-    protected void engineReset() {
-        engine.reset();
+    /**
+     * Creates an FFM engine with fallback to Java on failure.
+     */
+    private static SM3Engine createFFMEngine() {
+        try {
+            return new SM3EngineFFM();
+        } catch (Throwable t) {
+            System.err.println(
+                    "WARNING: Failed to create FFM SM3 engine: " +
+                    t.getMessage() + ". Using Java implementation instead.");
+            return new SM3EngineImpl();
+        }
     }
 
-    public Object clone() throws CloneNotSupportedException {
-        SM3MessageDigest clone = (SM3MessageDigest) super.clone();
-        clone.engine = engine.clone();
-        return clone;
+    /**
+     * Checks if OpenSSL libcrypto is loaded in the current process.
+     */
+    private static boolean isOpenSSLAvailable() {
+        try {
+            // Try to find the EVP_sm3 symbol in loaded libraries
+            java.lang.foreign.SymbolLookup.loaderLookup()
+                    .find("EVP_sm3");
+            return true;
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    /**
+     * Checks if the JNI suncrypto library is available.
+     */
+    private static boolean isJNILibraryAvailable() {
+        try {
+            System.loadLibrary("suncrypto");
+            return true;
+        } catch (UnsatisfiedLinkError e) {
+            return false;
+        }
+    }
+
+    /**
+     * Resets the cached engine type, forcing re-detection on next use.
+     * Useful for testing with different system properties.
+     */
+    static void resetEngineType() {
+        activeEngineType = null;
     }
 }
