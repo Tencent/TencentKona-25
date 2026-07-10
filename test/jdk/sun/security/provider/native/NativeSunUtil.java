@@ -17,9 +17,6 @@
  * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -28,18 +25,11 @@ public class NativeSunUtil {
 
     public static boolean nativeCryptoSupported() {
         String opensslCryptoPath = OpenSSLUtil.opensslCryptoPath();
-        boolean supported = nativeSunSupported() && opensslCryptoPath != null;
-        if (supported) {
+        if (opensslCryptoPath != null) {
             System.setProperty("jdk.openssl.cryptoLibPath", opensslCryptoPath);
+            return true;
         }
-        return supported;
-    }
-
-    private static boolean nativeSunSupported() {
-        Path jdkLibDir = Paths.get(System.getProperty("test.jdk")).resolve("lib");
-        Path suncryptoLinuxPath = jdkLibDir.resolve("libsuncrypto.so");
-        Path suncryptoMacPath = jdkLibDir.resolve("libsuncrypto.dylib");
-        return Files.exists(suncryptoLinuxPath) || Files.exists(suncryptoMacPath);
+        return false;
     }
 
     public static void execTaskSerially(Callable<Void> task, int count)
