@@ -214,6 +214,9 @@ public class EventNames {
     public static final String SecurityProperty = PREFIX + "SecurityPropertyModification";
     public static final String SecurityProviderService = PREFIX + "SecurityProviderService";
     public static final String DirectBufferStatistics = PREFIX + "DirectBufferStatistics";
+    public static final String UnsafeMemoryAllocation = PREFIX + "UnsafeMemoryAllocation";
+    public static final String UnsafeMemoryFree = PREFIX + "UnsafeMemoryFree";
+    public static final String UnsafeMemoryReallocation = PREFIX + "UnsafeMemoryReallocation";
     public static final String Deserialization = PREFIX + "Deserialization";
     public static final String SerializationMisdeclaration = PREFIX + "SerializationMisdeclaration";
     public static final String VirtualThreadStart = PREFIX + "VirtualThreadStart";

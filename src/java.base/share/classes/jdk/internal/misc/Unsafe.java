@@ -25,6 +25,9 @@
 
 package jdk.internal.misc;
 
+import jdk.internal.event.UnsafeAllocateMemoryEvent;
+import jdk.internal.event.UnsafeFreeMemoryEvent;
+import jdk.internal.event.UnsafeReallocateMemoryEvent;
 import jdk.internal.ref.Cleaner;
 import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
@@ -625,6 +628,7 @@ public final class Unsafe {
      * @see #putByte(long, byte)
      */
     public long allocateMemory(long bytes) {
+        long requestedBytes = bytes;
         bytes = alignToHeapWordSize(bytes);
 
         allocateMemoryChecks(bytes);
@@ -633,9 +637,15 @@ public final class Unsafe {
             return 0;
         }
 
+        boolean emitEvent = UnsafeAllocateMemoryEvent.enabled();
+        long start = emitEvent ? UnsafeAllocateMemoryEvent.timestamp() : 0L;
         long p = allocateMemory0(bytes);
         if (p == 0) {
             throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
+        }
+
+        if (emitEvent) {
+            commitUnsafeAllocateMemoryEvent(start, requestedBytes, p);
         }
 
         return p;
@@ -680,18 +690,33 @@ public final class Unsafe {
      * @see #allocateMemory
      */
     public long reallocateMemory(long address, long bytes) {
+        long requestedBytes = bytes;
         bytes = alignToHeapWordSize(bytes);
 
         reallocateMemoryChecks(address, bytes);
 
         if (bytes == 0) {
-            freeMemory(address);
+            if (address == 0) {
+                return 0;
+            }
+            boolean emitEvent = UnsafeReallocateMemoryEvent.enabled();
+            long start = emitEvent ? UnsafeReallocateMemoryEvent.timestamp() : 0L;
+            freeMemory0(address);
+            if (emitEvent) {
+                commitUnsafeReallocateMemoryEvent(start, address, requestedBytes, 0);
+            }
             return 0;
         }
 
+        boolean emitEvent = UnsafeReallocateMemoryEvent.enabled();
+        long start = emitEvent ? UnsafeReallocateMemoryEvent.timestamp() : 0L;
         long p = (address == 0) ? allocateMemory0(bytes) : reallocateMemory0(address, bytes);
         if (p == 0) {
             throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
+        }
+
+        if (emitEvent) {
+            commitUnsafeReallocateMemoryEvent(start, address, requestedBytes, p);
         }
 
         return p;
@@ -927,7 +952,39 @@ public final class Unsafe {
             return;
         }
 
+        boolean emitEvent = UnsafeFreeMemoryEvent.enabled();
+        long start = emitEvent ? UnsafeFreeMemoryEvent.timestamp() : 0L;
         freeMemory0(address);
+        if (emitEvent) {
+            commitUnsafeFreeMemoryEvent(start, address);
+        }
+    }
+
+    private static void commitUnsafeAllocateMemoryEvent(long start, long size, long address) {
+        try {
+            long duration = UnsafeAllocateMemoryEvent.timestamp() - start;
+            UnsafeAllocateMemoryEvent.commit(start, duration, size, address);
+        } catch (OutOfMemoryError e) {
+            // Ignore JFR event allocation failures.
+        }
+    }
+
+    private static void commitUnsafeReallocateMemoryEvent(long start, long oldAddress, long size, long address) {
+        try {
+            long duration = UnsafeReallocateMemoryEvent.timestamp() - start;
+            UnsafeReallocateMemoryEvent.commit(start, duration, oldAddress, size, address);
+        } catch (OutOfMemoryError e) {
+            // Ignore JFR event allocation failures.
+        }
+    }
+
+    private static void commitUnsafeFreeMemoryEvent(long start, long address) {
+        try {
+            long duration = UnsafeFreeMemoryEvent.timestamp() - start;
+            UnsafeFreeMemoryEvent.commit(start, duration, address);
+        } catch (OutOfMemoryError e) {
+            // Ignore JFR event allocation failures.
+        }
     }
 
     /**
