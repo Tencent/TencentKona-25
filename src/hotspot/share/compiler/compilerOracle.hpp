@@ -54,6 +54,7 @@ class methodHandle;
   option(DontInline,  "dontinline", Bool) \
   option(Blackhole,  "blackhole", Bool) \
   option(CompileOnly, "compileonly", Bool)\
+  option(RequireFullProfile, "requirefullprofile", Bool) \
   option(Exclude, "exclude", Bool) \
   option(Break, "break", Bool) \
   option(BreakAtExecute, "BreakAtExecute", Bool) \
@@ -161,6 +162,9 @@ class CompilerOracle : AllStatic {
 
   // Tells whether to break when compiling method
   static bool should_break_at(const methodHandle& method);
+
+  // Tells whether this method should not be compiled at limited profile level.
+  static bool should_require_full_profile(const methodHandle& method);
 
   // Tells whether there are any methods to print for print_method_statistics()
   static bool should_print_methods();

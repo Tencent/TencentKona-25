@@ -1775,6 +1775,12 @@ performed by the Java HotSpot VM.
     :   Prints generated assembler code after compilation of the specified
         method.
 
+    `requirefullprofile`
+    :   Prevents the specified method from being compiled at the limited
+        profiling level. When full profiling is available, a limited profiling
+        request for the method is promoted to the full profiling level so that
+        the method can collect complete profile data before full optimization.
+
     `quiet`
     :   Instructs not to print the compile commands. By default, the commands
         that you specify with the `-XX:CompileCommand` option are printed; for

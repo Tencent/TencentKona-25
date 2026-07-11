@@ -505,6 +505,13 @@ bool CompilerOracle::should_break_at(const methodHandle& method) {
   return check_predicate(CompileCommandEnum::Break, method);
 }
 
+bool CompilerOracle::should_require_full_profile(const methodHandle& method) {
+  if (CompilerDirectivesIgnoreCompileCommands) {
+    return false;
+  }
+  return check_predicate(CompileCommandEnum::RequireFullProfile, method);
+}
+
 void CompilerOracle::tag_blackhole_if_possible(const methodHandle& method) {
   if (!check_predicate(CompileCommandEnum::Blackhole, method)) {
     return;

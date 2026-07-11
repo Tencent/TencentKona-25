@@ -1362,6 +1362,11 @@ nmethod* CompileBroker::compile_method(const methodHandle& method, int osr_bci,
     return nullptr;
   }
 
+  comp_level = CompilationPolicy::adjust_level_for_require_full_profile(method, CompLevel_none, (CompLevel)comp_level);
+  if (comp_level == CompLevel_none) {
+    return nullptr;
+  }
+
   AbstractCompiler *comp = CompileBroker::compiler(comp_level);
   assert(comp != nullptr, "Ensure we have a compiler");
 

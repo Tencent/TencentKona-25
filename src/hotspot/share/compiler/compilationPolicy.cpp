@@ -292,6 +292,34 @@ bool CompilationPolicy::force_comp_at_level_simple(const methodHandle& method) {
   return false;
 }
 
+static bool requires_full_profile(const methodHandle& method) {
+  return CompilerOracle::should_require_full_profile(method);
+}
+
+static bool can_use_full_profile_level() {
+  // requirefullprofile needs the normal tiered path: Tier 3 gathers complete
+  // profile data before Tier 4. Other compilation modes do not have a Tier 3
+  // profiling stage to promote Tier 2 requests into.
+  return CompilationModeFlag::normal() && CompilationPolicy::highest_compile_level() >= CompLevel_full_profile;
+}
+
+CompLevel CompilationPolicy::adjust_level_for_require_full_profile(const methodHandle& method,
+                                                                   CompLevel cur_level,
+                                                                   CompLevel requested_level) {
+  if (requested_level != CompLevel_limited_profile || !requires_full_profile(method)) {
+    return requested_level;
+  }
+
+  // requirefullprofile keeps the method off Tier 2. If Tier 3 is available,
+  // use it to gather full profile data on the path to Tier 4; otherwise keep
+  // the current level and let the method continue executing without a Tier 2
+  // body.
+  if (can_use_full_profile_level()) {
+    return CompLevel_full_profile;
+  }
+  return cur_level;
+}
+
 CompLevel CompilationPolicy::comp_level(Method* method) {
   nmethod *nm = method->code();
   if (nm != nullptr && nm->is_in_use()) {
@@ -807,7 +835,8 @@ CompileTask* CompilationPolicy::select_task(CompileQueue* compile_queue, JavaThr
   methodHandle max_method_h(THREAD, max_method);
 
   if (max_task != nullptr && max_task->comp_level() == CompLevel_full_profile && TieredStopAtLevel > CompLevel_full_profile &&
-      max_method != nullptr && is_method_profiled(max_method_h) && !Arguments::is_compiler_only()) {
+      max_method != nullptr && !requires_full_profile(max_method_h) &&
+      is_method_profiled(max_method_h) && !Arguments::is_compiler_only()) {
     max_task->set_comp_level(CompLevel_limited_profile);
 
     if (CompileBroker::compilation_is_complete(max_method_h, max_task->osr_bci(), CompLevel_limited_profile)) {
@@ -1251,6 +1280,7 @@ CompLevel CompilationPolicy::trained_transition(const methodHandle& method, Comp
   if (CompilationModeFlag::high_only() && next_level < CompLevel_full_optimization) {
     return CompLevel_none;
   }
+  next_level = adjust_level_for_require_full_profile(method, cur_level, next_level);
   return (cur_level != next_level) ? limit_level(next_level) : cur_level;
 }
 
@@ -1296,11 +1326,14 @@ CompLevel CompilationPolicy::trained_transition(const methodHandle& method, Comp
 template<typename Predicate>
 CompLevel CompilationPolicy::common(const methodHandle& method, CompLevel cur_level, JavaThread* THREAD, bool disable_feedback) {
   CompLevel next_level = cur_level;
+  const bool require_full_profile = requires_full_profile(method);
 
-  if (force_comp_at_level_simple(method)) {
+  if (!require_full_profile && force_comp_at_level_simple(method)) {
     next_level = CompLevel_simple;
-  } else if (is_trivial(method) || method->is_native()) {
+  } else if ((!require_full_profile && is_trivial(method)) || method->is_native()) {
     // We do not care if there is profiling data for these methods, throw them to compiler.
+    // Native methods do not collect Java profiling data, so requirefullprofile
+    // does not force a Java full-profile stage for native wrappers.
     next_level = CompilationModeFlag::disable_intermediate() ? CompLevel_full_optimization : CompLevel_simple;
   } else if (MethodTrainingData::have_data()) {
     MethodTrainingData* mtd = MethodTrainingData::find_fast(method);
@@ -1320,6 +1353,7 @@ CompLevel CompilationPolicy::common(const methodHandle& method, CompLevel cur_le
   } else {
     next_level = standard_transition<Predicate>(method, cur_level, false /*delay_profiling*/, disable_feedback);
   }
+  next_level = adjust_level_for_require_full_profile(method, cur_level, next_level);
   return (next_level != cur_level) ? limit_level(next_level) : next_level;
 }
 
@@ -1553,4 +1587,3 @@ void CompilationPolicy::method_back_branch_event(const methodHandle& mh, const m
     }
   }
 }
-

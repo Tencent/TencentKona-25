@@ -378,6 +378,13 @@ class CompilationPolicy : AllStatic {
   static CompLevel initial_compile_level(const methodHandle& method);
   // Return highest level possible
   static CompLevel highest_compile_level();
+  // Apply per-method requirefullprofile policy to a requested compilation level.
+  // Level 2 is promoted to Level 3 in normal tiered mode when full profiling is
+  // available, preserving the path to Level 4. Otherwise the current level is
+  // kept so the method is not compiled at Level 2.
+  static CompLevel adjust_level_for_require_full_profile(const methodHandle& method,
+                                                         CompLevel cur_level,
+                                                         CompLevel requested_level);
   static void dump();
 };
 
