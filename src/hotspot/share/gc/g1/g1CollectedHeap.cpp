@@ -95,6 +95,7 @@
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.hpp"
@@ -110,6 +111,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/vmThread.hpp"
@@ -120,6 +122,26 @@
 #include "utilities/stack.inline.hpp"
 
 size_t G1CollectedHeap::_humongous_object_threshold_in_words = 0;
+
+static void log_successful_humongous_allocation(JavaThread* thread,
+                                                HeapWord* obj,
+                                                size_t word_size,
+                                                size_t region_count) {
+  LogMessage(gc, humongous) msg;
+  if (!msg.is_debug()) {
+    return;
+  }
+
+  const char* thread_name = thread->is_vthread_mounted()
+      ? JavaThread::name_for(thread->vthread())
+      : thread->name();
+  NonInterleavingLogStream ls{LogLevelType::Debug, msg};
+  ls.print_cr("Successful humongous allocation by Java thread \"%s\" "
+              "(object: " PTR_FORMAT ", size: %zuB, regions: %zu)",
+              thread_name, p2i(obj), word_size * HeapWordSize, region_count);
+  ls.print_cr("Java call stack:");
+  thread->print_active_stack_on(&ls);
+}
 
 // INVARIANTS/NOTES
 //
@@ -665,6 +687,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   // successfully schedule a collection which fails to perform the allocation.
   // Case b) is the only case when we'll return null.
   HeapWord* result = nullptr;
+  const size_t size_in_regions = humongous_obj_size_in_regions(word_size);
   for (uint try_count = 1; /* we'll return */; try_count++) {
     uint gc_count_before;
 
@@ -672,7 +695,6 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
     {
       MutexLocker x(Heap_lock);
 
-      size_t size_in_regions = humongous_obj_size_in_regions(word_size);
       // Given that humongous objects are not allocated in young
       // regions, we'll first try to do the allocation without doing a
       // collection hoping that there's enough space in the heap.
@@ -680,11 +702,14 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       if (result != nullptr) {
         policy()->old_gen_alloc_tracker()->
           add_allocated_humongous_bytes_since_last_gc(size_in_regions * G1HeapRegion::GrainBytes);
-        return result;
+      } else {
+        // Read the GC count while still holding the Heap_lock.
+        gc_count_before = total_collections();
       }
-
-      // Read the GC count while still holding the Heap_lock.
-      gc_count_before = total_collections();
+    }
+    if (result != nullptr) {
+      log_successful_humongous_allocation(JavaThread::current(), result, word_size, size_in_regions);
+      return result;
     }
 
     bool succeeded;
@@ -693,9 +718,9 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       log_trace(gc, alloc)("%s: Successfully scheduled collection returning " PTR_FORMAT,
                            Thread::current()->name(), p2i(result));
       if (result != nullptr) {
-        size_t size_in_regions = humongous_obj_size_in_regions(word_size);
         policy()->old_gen_alloc_tracker()->
           record_collection_pause_humongous_allocation(size_in_regions * G1HeapRegion::GrainBytes);
+        log_successful_humongous_allocation(JavaThread::current(), result, word_size, size_in_regions);
       }
       return result;
     }
