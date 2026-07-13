@@ -31,9 +31,13 @@ import java.security.MessageDigest;
 public final class SM3MessageDigest extends MessageDigest implements Cloneable {
 
     public static SM3Engine newEngine() {
-        return NativeSun.isNativeCryptoEnabled()
-                ? new SM3EngineNative()
-                : new SM3EngineImpl();
+        if (NativeSun.isFFMCryptoEnabled()) {
+            return new SM3EngineFFM();
+        }
+        if (NativeSun.isNativeCryptoEnabled()) {
+            return new SM3EngineNative();
+        }
+        return new SM3EngineImpl();
     }
 
     private SM3Engine engine = newEngine();

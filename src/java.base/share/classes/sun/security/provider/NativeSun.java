@@ -30,9 +30,17 @@ import java.security.PrivilegedAction;
  */
 final class NativeSun {
 
+    private static final boolean IS_FFM_CRYPTO_ENABLED;
     private static final boolean IS_NATIVE_CRYPTO_ENABLED;
 
     static {
+        // Check FFM crypto first (highest priority)
+        boolean enableFFMCrypto = Boolean.getBoolean(
+                "jdk.sun.enableFFMCrypto");
+        IS_FFM_CRYPTO_ENABLED = enableFFMCrypto
+                && SM3EngineFFM.isAvailable();
+
+        // Check JNI native crypto (fallback)
         boolean enableNativeCrypto = Boolean.getBoolean(
                 "jdk.sun.enableNativeCrypto");
         IS_NATIVE_CRYPTO_ENABLED = enableNativeCrypto
@@ -59,6 +67,10 @@ final class NativeSun {
             loaded = false;
         }
         return loaded;
+    }
+
+    static boolean isFFMCryptoEnabled() {
+        return IS_FFM_CRYPTO_ENABLED;
     }
 
     static boolean isNativeCryptoEnabled() {
