@@ -22,6 +22,12 @@
  * questions.
  */
 
+/*
+ * This file has been modified by Loongson Technology in 2024. These
+ * modifications are Copyright (c) 2023, 2024, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
 package compiler.intrinsics.chacha;
 
 import java.util.ArrayList;
@@ -38,7 +44,8 @@ import jdk.test.whitebox.cpuinfo.CPUInfo;
  * @library /test/lib
  * @requires (vm.cpu.features ~= ".*avx512.*" | vm.cpu.features ~= ".*avx2.*" | vm.cpu.features ~= ".*avx.*") |
  *           (os.arch=="aarch64" & vm.cpu.features ~= ".*simd.*") |
- *           (os.arch == "riscv64" & vm.cpu.features ~= ".*rvv.*")
+ *           (os.arch == "riscv64" & vm.cpu.features ~= ".*rvv.*") |
+ *           (os.arch == "loongarch64" & vm.cpu.features ~= ".*lsx.*")
  * @build   compiler.intrinsics.chacha.ExerciseChaCha20
  *          jdk.test.whitebox.WhiteBox
  * @run driver jdk.test.lib.helpers.ClassFileInstaller jdk.test.whitebox.WhiteBox
@@ -106,8 +113,14 @@ public class TestChaCha20 {
                 System.out.println("Setting up vector worker");
                 configs.add(List.of());
             }
+        } else if (Platform.isLoongArch64()) {
+            // LoongArch64 intrinsics require the lsx instructions
+            if (containsFuzzy(cpuFeatures, "lsx")) {
+                System.out.println("Setting up LSX worker");
+                configs.add(new ArrayList());
+            }
         } else {
-            // We only have ChaCha20 intrinsics on x64, aarch64 and riscv64
+            // We only have ChaCha20 intrinsics on x64, aarch64, riscv64 and loongarch64
             // currently.  If the platform is neither of these then
             // the ChaCha20 known answer tests in
             // com/sun/crypto/provider/Cipher are sufficient.

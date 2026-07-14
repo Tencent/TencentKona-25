@@ -22,6 +22,12 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+
+/*
+ * This file has been modified by Loongson Technology in 2023, These
+ * modifications are Copyright (c) 2022, 2023, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
 package jdk.internal.foreign.abi;
 
 import jdk.internal.foreign.SystemLookup;
@@ -30,6 +36,7 @@ import jdk.internal.foreign.abi.aarch64.linux.LinuxAArch64Linker;
 import jdk.internal.foreign.abi.aarch64.macos.MacOsAArch64Linker;
 import jdk.internal.foreign.abi.aarch64.windows.WindowsAArch64Linker;
 import jdk.internal.foreign.abi.fallback.FallbackLinker;
+import jdk.internal.foreign.abi.loongarch64.linux.LinuxLoongArch64Linker;
 import jdk.internal.foreign.abi.ppc64.aix.AixPPC64Linker;
 import jdk.internal.foreign.abi.ppc64.linux.LinuxPPC64Linker;
 import jdk.internal.foreign.abi.ppc64.linux.LinuxPPC64leLinker;
@@ -65,6 +72,7 @@ public abstract sealed class AbstractLinker implements Linker permits LinuxAArch
                                                                       Windowsx64Linker, AixPPC64Linker,
                                                                       LinuxPPC64Linker, LinuxPPC64leLinker,
                                                                       LinuxRISCV64Linker, LinuxS390Linker,
+                                                                      LinuxLoongArch64Linker,
                                                                       FallbackLinker {
 
     public interface UpcallStubFactory {

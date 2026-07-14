@@ -22,6 +22,12 @@
  *
  */
 
+/*
+ * This file has been modified by Loongson Technology in 2025, These
+ * modifications are Copyright (c) 2022, 2025, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
 #include "code/codeCache.hpp"
 #include "code/compiledIC.hpp"
 #include "compiler/compileBroker.hpp"
@@ -1031,6 +1037,17 @@
 #define VM_INT_CPU_FEATURE_CONSTANTS CPU_FEATURE_FLAGS(DECLARE_INT_CPU_FEATURE_CONSTANT)
 
 #endif
+
+#ifdef LOONGARCH64
+
+#define VM_STRUCTS_CPU(nonstatic_field, static_field, unchecked_nonstatic_field, volatile_nonstatic_field, nonproduct_nonstatic_field) \
+  volatile_nonstatic_field(JavaFrameAnchor, _last_Java_fp, intptr_t*)
+
+#define DECLARE_INT_CPU_FEATURE_CONSTANT(id, name, bit) GENERATE_VM_INT_CONSTANT_ENTRY(VM_Version::CPU_##id)
+#define VM_INT_CPU_FEATURE_CONSTANTS CPU_FEATURE_FLAGS(DECLARE_INT_CPU_FEATURE_CONSTANT)
+
+#endif
+
 
 #ifdef X86
 
