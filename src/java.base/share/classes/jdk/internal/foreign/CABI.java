@@ -24,6 +24,12 @@
  *
  */
 
+/*
+ * This file has been modified by Loongson Technology in 2023, These
+ * modifications are Copyright (c) 2022, 2023, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
 package jdk.internal.foreign;
 
 import jdk.internal.foreign.abi.fallback.FallbackLinker;
@@ -44,6 +50,7 @@ public enum CABI {
     LINUX_PPC_64_LE,
     LINUX_RISCV_64,
     LINUX_S390,
+    LINUX_LOONGARCH_64,
     FALLBACK,
     UNSUPPORTED;
 
@@ -94,7 +101,11 @@ public enum CABI {
                 if (OperatingSystem.isLinux()) {
                     return LINUX_S390;
                 }
-        }
+            } else if (arch.equals("loongarch64")) {
+                if (OperatingSystem.isLinux()) {
+                    return LINUX_LOONGARCH_64;
+                }
+            }
         } else if (FallbackLinker.isSupported()) {
             return FALLBACK; // fallback linker
         }

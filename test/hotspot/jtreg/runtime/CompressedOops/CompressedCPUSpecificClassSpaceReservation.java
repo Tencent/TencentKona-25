@@ -23,6 +23,12 @@
  */
 
 /*
+ * This file has been modified by Loongson Technology in 2025, These
+ * modifications are Copyright (c) 2023, 2025 Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
+/*
  * @test
  * @summary Test the various CPU-specific reservation schemes
  * @requires vm.bits == 64 & !vm.graal.enabled & vm.debug == true
@@ -92,6 +98,12 @@ public class CompressedCPUSpecificClassSpaceReservation {
             output.shouldContain("reserve_between (range [0x0000000100000000-0x0000100000000000)");
             // bits 44..64
             output.shouldContain("reserve_between (range [0x0000100000000000-0xffffffffffffffff)");
+        } else if (Platform.isLoongArch64()) {
+            output.shouldContain(tryReserveForUnscaled); // unconditionally
+            // bits 32..52
+            output.shouldContain("reserve_between (range [0x0000000100000000-0x0010000000000000)");
+            // bits 52..64
+            output.shouldContain("reserve_between (range [0x0010000000000000-0xffffffffffffffff)");
         } else if (Platform.isS390x()) {
             output.shouldContain(tryReserveForUnscaled); // unconditionally
             if (CDS) {

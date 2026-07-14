@@ -23,13 +23,19 @@
  */
 
 /*
+ * This file has been modified by Loongson Technology in 2023, These
+ * modifications are Copyright (c) 2023, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
+/*
  * @test
  * @bug 8289996
  * @summary Test range check hoisting for some scaled iv at array index
  * @library /test/lib /
  * @requires vm.flagless
  * @requires vm.debug & vm.compiler2.enabled
- * @requires os.simpleArch == "x64" | os.arch == "aarch64" | (os.arch == "riscv64" & vm.cpu.features ~= ".*rvv.*")
+ * @requires os.simpleArch == "x64" | os.arch == "aarch64" | (os.arch == "riscv64" & vm.cpu.features ~= ".*rvv.*") | os.arch == "loongarch64"
  * @modules jdk.incubator.vector
  * @run main/othervm compiler.rangechecks.TestRangeCheckHoistingScaledIV
  */
