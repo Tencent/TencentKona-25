@@ -23,6 +23,7 @@
  */
 
 #include "classfile/symbolTable.hpp"
+#include "compiler/compilerDefinitions.hpp"
 #include "compiler/compilerDirectives.hpp"
 #include "compiler/compilerOracle.hpp"
 #include "compiler/methodMatcher.hpp"
@@ -1159,6 +1160,14 @@ bool compilerOracle_init() {
     if (PrintAssembly) {
       warning("CompileCommand and/or %s file contains 'print' commands, but PrintAssembly is also enabled", default_cc_file);
     }
+  }
+  // requirefullprofile only has a full-profile (level 3) tier to require under the default (normal)
+  // tiered mode with TieredStopAtLevel >= 3. Warn once if it was set but cannot take effect, rather
+  // than silently ignoring it; we never override the user's compilation mode / TieredStopAtLevel.
+  if (has_command(CompileCommandEnum::RequireFullProfile) &&
+      (!TieredCompilation || !CompilationModeFlag::normal() || TieredStopAtLevel < CompLevel_full_profile)) {
+    warning("CompileCommand requirefullprofile has no effect unless tiered compilation is enabled "
+            "in the default compilation mode with TieredStopAtLevel >= 3");
   }
   return success;
 }
