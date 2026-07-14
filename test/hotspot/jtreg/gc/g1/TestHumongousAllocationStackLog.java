@@ -36,16 +36,26 @@ package gc.g1;
 import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
+import java.util.concurrent.CountDownLatch;
+
 public class TestHumongousAllocationStackLog {
     private static final String LOG_LINE_PREFIX = "Humongous object allocation (object size";
     private static final String STACK_FRAME_SUBSTRING =
         "gc.g1.TestHumongousAllocationStackLog$HumongousAllocator.allocateHumongous";
+    private static final String VIRTUAL_THREAD_NAME = "virtual-humongous-allocator";
+    private static final String CONCURRENT_THREAD_NAME_PREFIX = "humongous-allocator-";
+    private static final int CONCURRENT_THREAD_COUNT = 8;
 
     public static void main(String[] args) throws Exception {
         OutputAnalyzer debugOutput = runWithLogLevel("debug");
         debugOutput.shouldHaveExitValue(0);
-        debugOutput.shouldContain(LOG_LINE_PREFIX);
-        debugOutput.shouldContain(STACK_FRAME_SUBSTRING);
+        debugOutput.shouldContainMultiLinePattern("thread main", STACK_FRAME_SUBSTRING);
+        debugOutput.shouldContainMultiLinePattern("thread " + VIRTUAL_THREAD_NAME,
+                                                  STACK_FRAME_SUBSTRING);
+        for (int i = 0; i < CONCURRENT_THREAD_COUNT; i++) {
+            debugOutput.shouldContainMultiLinePattern("thread " + CONCURRENT_THREAD_NAME_PREFIX + i,
+                                                      STACK_FRAME_SUBSTRING);
+        }
 
         OutputAnalyzer infoOutput = runWithLogLevel("info");
         infoOutput.shouldHaveExitValue(0);
@@ -69,10 +79,37 @@ public class TestHumongousAllocationStackLog {
             sink = new byte[700 * 1024];
         }
 
-        public static void main(String[] args) {
-            for (int i = 0; i < 5; i++) {
-                allocateHumongous();
+        private static void allocateConcurrently() throws Exception {
+            CountDownLatch ready = new CountDownLatch(CONCURRENT_THREAD_COUNT);
+            CountDownLatch start = new CountDownLatch(1);
+            Thread[] threads = new Thread[CONCURRENT_THREAD_COUNT];
+
+            for (int i = 0; i < threads.length; i++) {
+                final int index = i;
+                threads[i] = Thread.ofPlatform()
+                    .name(CONCURRENT_THREAD_NAME_PREFIX + index)
+                    .start(() -> {
+                        ready.countDown();
+                        try {
+                            start.await();
+                        } catch (InterruptedException e) {
+                            throw new RuntimeException(e);
+                        }
+                        allocateHumongous();
+                    });
             }
+
+            ready.await();
+            start.countDown();
+            for (Thread thread : threads) {
+                thread.join();
+            }
+        }
+
+        public static void main(String[] args) throws Exception {
+            allocateHumongous();
+            Thread.ofVirtual().name(VIRTUAL_THREAD_NAME).start(HumongousAllocator::allocateHumongous).join();
+            allocateConcurrently();
             System.out.println(sink);
         }
     }
