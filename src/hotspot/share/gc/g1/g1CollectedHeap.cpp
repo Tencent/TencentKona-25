@@ -95,6 +95,7 @@
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.hpp"
@@ -635,8 +636,9 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t min_word_size,
 }
 
 static void log_humongous_allocation_stack(size_t word_size, HeapWord* obj_addr) {
-  LogTarget(Debug, gc, humongous) lt;
-  if (!lt.is_enabled()) {
+  LogMessage(gc, humongous) msg;
+  NonInterleavingLogStream ls{LogLevel::Debug, msg};
+  if (!ls.is_enabled()) {
     return;
   }
 
@@ -651,7 +653,6 @@ static void log_humongous_allocation_stack(size_t word_size, HeapWord* obj_addr)
   }
   const size_t object_size_bytes = word_size * HeapWordSize;
 
-  LogStream ls(lt);
   ls.print_cr("Humongous object allocation (object size %zu @ " PTR_FORMAT ") thread %s",
               object_size_bytes, p2i(obj_addr), thread_label);
 
