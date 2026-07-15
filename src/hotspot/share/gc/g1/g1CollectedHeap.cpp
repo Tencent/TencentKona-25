@@ -132,6 +132,7 @@ static void log_successful_humongous_allocation(JavaThread* thread,
     return;
   }
 
+  ResourceMark rm(thread);
   const char* thread_name = thread->is_vthread_mounted()
       ? JavaThread::name_for(thread->vthread())
       : thread->name();
@@ -690,7 +691,6 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   const size_t size_in_regions = humongous_obj_size_in_regions(word_size);
   for (uint try_count = 1; /* we'll return */; try_count++) {
     uint gc_count_before;
-
 
     {
       MutexLocker x(Heap_lock);

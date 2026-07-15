@@ -37,6 +37,7 @@ import jdk.test.lib.process.OutputAnalyzer;
 import jdk.test.lib.process.ProcessTools;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 public class TestHumongousAllocationStack {
     private static final String ALLOCATOR_THREAD_NAME = "humongous-allocator";
@@ -46,10 +47,15 @@ public class TestHumongousAllocationStack {
     private static final String STACK_HEADER = "Java call stack:";
     private static final int DIRECT_ALLOCATION_COUNT = 3;
     private static final int VIRTUAL_ALLOCATION_COUNT = 2;
+    private static final String CONCURRENT_ALLOCATOR_THREAD_PREFIX =
+        "humongous-concurrent-allocator-";
+    private static final int CONCURRENT_ALLOCATOR_THREAD_COUNT = 8;
+    private static final int CONCURRENT_ALLOCATION_COUNT = 3;
 
     public static void main(String[] args) throws Exception {
         testDebugLogging();
         testVirtualThreadDebugLogging();
+        testConcurrentDebugLogging();
         testInfoLogging();
         testGcThenSuccessfulAllocation();
     }
@@ -84,6 +90,24 @@ public class TestHumongousAllocationStack {
                              VIRTUAL_ALLOCATOR_THREAD_NAME,
                              "gc.g1.TestHumongousAllocationStack$VirtualThreadAllocator.allocateHumongousObject",
                              VIRTUAL_ALLOCATION_COUNT);
+    }
+
+    private static void testConcurrentDebugLogging() throws Exception {
+        OutputAnalyzer output = ProcessTools.executeLimitedTestJava(
+            "-XX:+UseG1GC",
+            "-Xms64m",
+            "-Xmx64m",
+            "-XX:G1HeapRegionSize=1M",
+            "-Xlog:gc+humongous=debug",
+            ConcurrentAllocator.class.getName());
+
+        output.shouldHaveExitValue(0);
+        for (int i = 0; i < CONCURRENT_ALLOCATOR_THREAD_COUNT; i++) {
+            assertAllocationLogs(output,
+                                 CONCURRENT_ALLOCATOR_THREAD_PREFIX + i,
+                                 "gc.g1.TestHumongousAllocationStack$ConcurrentAllocator.allocateHumongousObject",
+                                 CONCURRENT_ALLOCATION_COUNT);
+        }
     }
 
     private static void testInfoLogging() throws Exception {
@@ -190,6 +214,52 @@ public class TestHumongousAllocationStack {
         private static void allocateHumongousObjects() {
             for (int i = 0; i < VIRTUAL_ALLOCATION_COUNT; i++) {
                 sink[i] = allocateHumongousObject();
+            }
+        }
+
+        private static Object allocateHumongousObject() {
+            return new byte[768 * 1024];
+        }
+    }
+
+    static class ConcurrentAllocator {
+        private static final Object[][] sink =
+            new Object[CONCURRENT_ALLOCATOR_THREAD_COUNT][CONCURRENT_ALLOCATION_COUNT];
+
+        public static void main(String[] args) throws Exception {
+            CountDownLatch ready = new CountDownLatch(CONCURRENT_ALLOCATOR_THREAD_COUNT);
+            CountDownLatch start = new CountDownLatch(1);
+            Thread[] allocators = new Thread[CONCURRENT_ALLOCATOR_THREAD_COUNT];
+
+            for (int i = 0; i < allocators.length; i++) {
+                final int index = i;
+                allocators[i] = new Thread(() -> allocateHumongousObjects(index, ready, start),
+                                           CONCURRENT_ALLOCATOR_THREAD_PREFIX + index);
+                allocators[i].start();
+            }
+
+            ready.await();
+            start.countDown();
+            for (Thread allocator : allocators) {
+                allocator.join();
+            }
+        }
+
+        private static void allocateHumongousObjects(int threadIndex,
+                                                     CountDownLatch ready,
+                                                     CountDownLatch start) {
+            ready.countDown();
+            await(start);
+            for (int i = 0; i < CONCURRENT_ALLOCATION_COUNT; i++) {
+                sink[threadIndex][i] = allocateHumongousObject();
+            }
+        }
+
+        private static void await(CountDownLatch latch) {
+            try {
+                latch.await();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
             }
         }
 
