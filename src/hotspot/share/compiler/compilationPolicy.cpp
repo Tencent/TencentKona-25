@@ -317,16 +317,19 @@ static bool requires_full_profile(const methodHandle& method) {
       && CompilerOracle::has_option(method, CompileCommandEnum::RequireFullProfile);
 }
 
-// Apply the requirefullprofile constraint to a computed target level: never let a marked method
-// settle below full profile (level 3), and never let it skip full profile on the way to full
-// optimization (level 4). Callers invoke this only for methods that requires_full_profile(). Because
-// the first check is against cur_level, a legitimate full_profile(3) -> full_optimization(4) advance
-// (cur_level == full_profile) is preserved.
+// Apply the requirefullprofile constraint to a computed target level: never take the
+// limited-profile (level 2) shortcut, and never skip full profile (level 3) on the way to full
+// optimization (level 4). A simple (level 1) decision is deliberately left untouched: methods the
+// policy routes to level 1 (trivial methods, native method wrappers, training data recorded at
+// level 1) are not on a path to level 4, so forcing a profile on them would only pin them in
+// slower profiling code for no gain. Callers invoke this only for methods that
+// requires_full_profile(). Because the second check is against cur_level, a legitimate
+// full_profile(3) -> full_optimization(4) advance (cur_level == full_profile) is preserved.
 static CompLevel apply_require_full_profile(CompLevel cur_level, CompLevel next_level) {
-  if (cur_level < CompLevel_full_profile && next_level == CompLevel_full_optimization) {
+  if (next_level == CompLevel_limited_profile) {
     return CompLevel_full_profile;
   }
-  if (next_level > CompLevel_none && next_level < CompLevel_full_profile) {
+  if (cur_level < CompLevel_full_profile && next_level == CompLevel_full_optimization) {
     return CompLevel_full_profile;
   }
   return next_level;
@@ -1337,13 +1340,8 @@ template<typename Predicate>
 CompLevel CompilationPolicy::common(const methodHandle& method, CompLevel cur_level, JavaThread* THREAD, bool disable_feedback) {
   CompLevel next_level = cur_level;
 
-  bool require_full_profile = requires_full_profile(method);
-
   if (force_comp_at_level_simple(method)) {
-    // Routing a method to C1 (simple) as a JVMCI/Graal safety fallback takes precedence over
-    // requirefullprofile, so clear the flag to exempt this path from the clamp below.
     next_level = CompLevel_simple;
-    require_full_profile = false;
   } else if (is_trivial(method) || method->is_native()) {
     // We do not care if there is profiling data for these methods, throw them to compiler.
     next_level = CompilationModeFlag::disable_intermediate() ? CompLevel_full_optimization : CompLevel_simple;
@@ -1365,11 +1363,12 @@ CompLevel CompilationPolicy::common(const methodHandle& method, CompLevel cur_le
   } else {
     next_level = standard_transition<Predicate>(method, cur_level, false /*delay_profiling*/, disable_feedback);
   }
-  // requirefullprofile: never let a marked method settle below full profile (level 3), and never
-  // let it skip full profile on the way to full optimization (level 4). Applied here as a single
-  // choke point, this covers the standard, trained, and post-deopt (MDO-at-none) paths. The
-  // force_comp_at_level_simple branch above cleared the flag and is intentionally exempt.
-  if (require_full_profile) {
+  // requirefullprofile: never let a marked method take the limited-profile (level 2) shortcut or
+  // skip full profile (level 3) on the way to full optimization (level 4). Applied here as a
+  // single choke point, this covers the standard, trained, and post-deopt (MDO-at-none) paths.
+  // Simple (level 1) decisions pass through unchanged, so the force_comp_at_level_simple,
+  // trivial, and native branches above are naturally unaffected.
+  if (requires_full_profile(method)) {
     next_level = apply_require_full_profile(cur_level, next_level);
   }
   return (next_level != cur_level) ? limit_level(next_level) : next_level;

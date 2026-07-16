@@ -20,10 +20,15 @@
 /*
  * @test
  * @summary -XX:CompileCommand=requirefullprofile forces a marked method through the
- *          full-profile tier (level 3); it is never compiled at limited profile (level 2)
- *          and never skips level 3 on its way to full optimization (level 4). Verifies the
- *          actual compilation levels, not just that the command parses.
+ *          full-profile tier (level 3): it is never compiled at limited profile (level 2)
+ *          and never skips level 3 on its way to full optimization (level 4). Simple
+ *          (level 1) decisions are not rewritten, so a marked trivial method keeps the
+ *          stock level-1 policy. Verifies the actual compilation levels, not just that
+ *          the command parses.
  * @requires vm.compMode != "Xcomp"
+ * @requires vm.compiler1.enabled & vm.compiler2.enabled
+ * @requires (vm.opt.TieredStopAtLevel == null | vm.opt.TieredStopAtLevel == 4)
+ * @requires (vm.opt.CompilationMode == null | vm.opt.CompilationMode == "default" | vm.opt.CompilationMode == "normal")
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
  * @build jdk.test.whitebox.WhiteBox
@@ -119,7 +124,7 @@ public class TestRequireFullProfileLevels {
             throw new SkippedException("requires TieredCompilation, TieredStopAtLevel=4, and the normal CompilationMode");
         }
 
-        testTrivialDiscriminator();
+        testMarkedTrivialKeepsSimple();
         testForcedLimitedProfileStepsToFullProfile();
         testDeoptReprofileDoesNotSkipFullProfile();
         testOsrMarkedMethodProfilesThroughFullProfile();
@@ -127,15 +132,13 @@ public class TestRequireFullProfileLevels {
         System.out.println("TestRequireFullProfileLevels passed");
     }
 
-    // PRIMARY, fully deterministic, with a built-in negative control.
-    //
-    // An unmarked trivial method takes the is_trivial() branch in common() and is compiled at level 1
-    // (simple), where it stays forever (standard_transition has no case for level 1). A marked trivial
-    // method reaches the same branch, but the requirefullprofile clamp in common() raises that level-1
-    // decision to full profile (3) and pins it there: on each later event the branch recomputes simple
-    // (1), which the clamp caps back to exactly 3, so it never advances. So the marked method must be
-    // at full profile (3), while its unmarked sibling in the same JVM stays at level 1.
-    private static void testTrivialDiscriminator() throws Exception {
+    // Simple (level 1) decisions are deliberately NOT rewritten by requirefullprofile: the option
+    // governs the path to full optimization (level 4), and a trivial method the policy routes to
+    // simple never takes that path -- forcing it to collect a profile would only pin it in slower
+    // profiling code at level 3. A marked trivial method must therefore behave exactly like its
+    // unmarked sibling and stay at simple (1). This is a regression test against re-widening the
+    // clamp to level-1 decisions.
+    private static void testMarkedTrivialKeepsSimple() throws Exception {
         Method marked = method("markedTrivial");
         Method control = method("controlTrivial");
         WB.testSetDontInlineMethod(marked, true);
@@ -147,10 +150,10 @@ public class TestRequireFullProfileLevels {
         int markedLevel = WB.getMethodCompilationLevel(marked, false);
         int controlLevel = WB.getMethodCompilationLevel(control, false);
 
-        Asserts.assertEquals(markedLevel, FULL_PROFILE,
-                "marked trivial method must be pinned at full profile (3), got " + markedLevel);
+        Asserts.assertEquals(markedLevel, SIMPLE,
+                "marked trivial method must keep the stock simple (1) decision, got " + markedLevel);
         Asserts.assertEquals(controlLevel, SIMPLE,
-                "unmarked trivial method (negative control) must stay at simple (1), got " + controlLevel);
+                "unmarked trivial method (control) must stay at simple (1), got " + controlLevel);
     }
 
     // Force the method to exactly level 2, then let natural counter events drive the next step and
