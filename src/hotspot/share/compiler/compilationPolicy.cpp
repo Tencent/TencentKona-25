@@ -1280,8 +1280,11 @@ CompLevel CompilationPolicy::trained_transition(const methodHandle& method, Comp
   if (CompilationModeFlag::high_only() && next_level < CompLevel_full_optimization) {
     return CompLevel_none;
   }
-  next_level = adjust_level_for_require_full_profile(method, cur_level, next_level);
-  return (cur_level != next_level) ? limit_level(next_level) : cur_level;
+  if (next_level != cur_level) {
+    next_level = limit_level(next_level);
+    next_level = adjust_level_for_require_full_profile(method, cur_level, next_level);
+  }
+  return next_level;
 }
 
 /*
@@ -1330,10 +1333,11 @@ CompLevel CompilationPolicy::common(const methodHandle& method, CompLevel cur_le
 
   if (!require_full_profile && force_comp_at_level_simple(method)) {
     next_level = CompLevel_simple;
-  } else if ((!require_full_profile && is_trivial(method)) || method->is_native()) {
+  } else if (is_trivial(method) || method->is_native()) {
     // We do not care if there is profiling data for these methods, throw them to compiler.
     // Native methods do not collect Java profiling data, so requirefullprofile
-    // does not force a Java full-profile stage for native wrappers.
+    // does not force a Java full-profile stage for native wrappers. Accessors
+    // and constant getters do not create MDOs, so keep their simple path too.
     next_level = CompilationModeFlag::disable_intermediate() ? CompLevel_full_optimization : CompLevel_simple;
   } else if (MethodTrainingData::have_data()) {
     MethodTrainingData* mtd = MethodTrainingData::find_fast(method);
@@ -1353,8 +1357,11 @@ CompLevel CompilationPolicy::common(const methodHandle& method, CompLevel cur_le
   } else {
     next_level = standard_transition<Predicate>(method, cur_level, false /*delay_profiling*/, disable_feedback);
   }
-  next_level = adjust_level_for_require_full_profile(method, cur_level, next_level);
-  return (next_level != cur_level) ? limit_level(next_level) : next_level;
+  if (next_level != cur_level) {
+    next_level = limit_level(next_level);
+    next_level = adjust_level_for_require_full_profile(method, cur_level, next_level);
+  }
+  return next_level;
 }
 
 

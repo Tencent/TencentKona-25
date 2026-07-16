@@ -24,7 +24,8 @@
 /*
  * @test
  * @summary Checks that CompileCommand=requirefullprofile is parsed, prevents level 2 compilation,
- *          and keeps Java methods on the full-profile path to level 4 when level 4 is available.
+ *          keeps non-trivial Java methods on the full-profile path to level 4 when available,
+ *          and preserves the simple path for trivial methods that cannot create MDOs.
  * @requires vm.compiler1.enabled & vm.compiler2.enabled
  * @requires vm.compMode != "Xint"
  * @library /test/lib /
@@ -38,9 +39,21 @@
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
  *                   -XX:+TieredCompilation -XX:TieredStopAtLevel=4 -XX:-BackgroundCompilation
  *                   -XX:CompileThresholdScaling=0.01
- *                   -XX:CompileCommand=dontinline,compiler.oracle.RequireFullProfileTest::trivial
- *                   -XX:CompileCommand=requirefullprofile,compiler.oracle.RequireFullProfileTest::trivial
- *                   compiler.oracle.RequireFullProfileTest trivial
+ *                   -XX:CompileCommand=dontinline,compiler.oracle.RequireFullProfileTest::fieldReader
+ *                   -XX:CompileCommand=requirefullprofile,compiler.oracle.RequireFullProfileTest::fieldReader
+ *                   compiler.oracle.RequireFullProfileTest fieldReader
+ * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
+ *                   -XX:+TieredCompilation -XX:TieredStopAtLevel=4 -XX:-BackgroundCompilation
+ *                   -XX:CompileThresholdScaling=0.01
+ *                   -XX:CompileCommand=dontinline,compiler.oracle.RequireFullProfileTest$Accessor::getValue
+ *                   -XX:CompileCommand=requirefullprofile,compiler.oracle.RequireFullProfileTest$Accessor::getValue
+ *                   compiler.oracle.RequireFullProfileTest accessor
+ * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
+ *                   -XX:+TieredCompilation -XX:TieredStopAtLevel=4 -XX:-BackgroundCompilation
+ *                   -XX:CompileThresholdScaling=0.01
+ *                   -XX:CompileCommand=dontinline,compiler.oracle.RequireFullProfileTest::constantGetter
+ *                   -XX:CompileCommand=requirefullprofile,compiler.oracle.RequireFullProfileTest::constantGetter
+ *                   compiler.oracle.RequireFullProfileTest constant
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
  *                   -XX:+TieredCompilation -XX:TieredStopAtLevel=4 -XX:-BackgroundCompilation
  *                   -XX:CompileThresholdScaling=0.01
@@ -54,6 +67,11 @@
  *                   -XX:+TieredCompilation -XX:TieredStopAtLevel=2 -XX:-BackgroundCompilation
  *                   -XX:CompileCommand=requirefullprofile,compiler.oracle.RequireFullProfileTest::test
  *                   compiler.oracle.RequireFullProfileTest stopAt2
+ * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
+ *                   -XX:+TieredCompilation -XX:TieredStopAtLevel=2 -XX:-BackgroundCompilation
+ *                   -XX:CompileThresholdScaling=0.01
+ *                   -XX:CompileCommand=requirefullprofile,compiler.oracle.RequireFullProfileTest::test
+ *                   compiler.oracle.RequireFullProfileTest stopAt2Natural
  * @run main/othervm -Xbootclasspath/a:. -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
  *                   -XX:+TieredCompilation -XX:TieredStopAtLevel=3 -XX:-BackgroundCompilation
  *                   -XX:CompileCommand=requirefullprofile,compiler.oracle.RequireFullProfileTest::test
@@ -79,6 +97,7 @@ import java.lang.reflect.Method;
 
 public class RequireFullProfileTest {
     private static final WhiteBox WB = WhiteBox.getWhiteBox();
+    private static final Accessor ACCESSOR = new Accessor();
     private static int field = 42;
     private static volatile int sink;
 
@@ -90,8 +109,12 @@ public class RequireFullProfileTest {
         return result;
     }
 
-    public static int trivial() {
+    public static int fieldReader() {
         return field;
+    }
+
+    public static int constantGetter() {
+        return 7;
     }
 
     public static int osrTest(int limit) {
@@ -105,7 +128,9 @@ public class RequireFullProfileTest {
     public static void main(String[] args) throws Exception {
         String mode = args.length > 0 ? args[0] : "";
         Method method = switch (mode) {
-            case "trivial" -> RequireFullProfileTest.class.getMethod("trivial");
+            case "fieldReader" -> RequireFullProfileTest.class.getMethod("fieldReader");
+            case "accessor" -> Accessor.class.getDeclaredMethod("getValue");
+            case "constant" -> RequireFullProfileTest.class.getMethod("constantGetter");
             case "osr" -> RequireFullProfileTest.class.getMethod("osrTest", int.class);
             default -> RequireFullProfileTest.class.getMethod("test", int.class);
         };
@@ -119,6 +144,11 @@ public class RequireFullProfileTest {
                     "Level 2 compilation should be rejected when requirefullprofile cannot promote to level 3");
             Asserts.assertNE(CompilerWhiteBoxTest.COMP_LEVEL_LIMITED_PROFILE, WB.getMethodCompilationLevel(method),
                     "requirefullprofile should not allow level 2 compilation");
+            return;
+        }
+
+        if (mode.equals("stopAt2Natural")) {
+            assertNaturalStopAt2DoesNotCompileAtLevel2(method);
             return;
         }
 
@@ -162,8 +192,13 @@ public class RequireFullProfileTest {
             return;
         }
 
-        if (mode.equals("trivial")) {
-            assertTrivialMethodUsesFullProfilePath(method);
+        if (mode.equals("accessor") || mode.equals("constant")) {
+            assertTrivialMethodUsesSimplePath(method, mode);
+            return;
+        }
+
+        if (mode.equals("fieldReader")) {
+            assertFieldReaderUsesFullProfilePath(method);
             return;
         }
 
@@ -187,20 +222,47 @@ public class RequireFullProfileTest {
                 "requirefullprofile method should eventually compile at level 4");
     }
 
-    private static void assertTrivialMethodUsesFullProfilePath(Method method) {
+    private static void assertNaturalStopAt2DoesNotCompileAtLevel2(Method method) {
+        WB.clearMethodState(method);
+        int level = WB.getMethodCompilationLevel(method);
+        for (int i = 0; i < 200_000; i++) {
+            test(i);
+            level = WB.getMethodCompilationLevel(method);
+            Asserts.assertNE(CompilerWhiteBoxTest.COMP_LEVEL_LIMITED_PROFILE, level,
+                    "requirefullprofile should not allow natural compilation to be clipped to level 2");
+        }
+    }
+
+    private static void assertFieldReaderUsesFullProfilePath(Method method) {
         int level = WB.getMethodCompilationLevel(method);
         for (int i = 0; i < 200_000 && level != CompilerWhiteBoxTest.COMP_LEVEL_FULL_OPTIMIZATION; i++) {
-            sink = trivial();
+            sink = fieldReader();
             level = WB.getMethodCompilationLevel(method);
             if (level != CompilerWhiteBoxTest.COMP_LEVEL_NONE) {
                 Asserts.assertNE(CompilerWhiteBoxTest.COMP_LEVEL_SIMPLE, level,
-                        "requirefullprofile should prevent trivial Java methods from taking the level 1 shortcut");
+                        "requirefullprofile should keep non-trivial Java methods off the level 1 shortcut");
                 Asserts.assertNE(CompilerWhiteBoxTest.COMP_LEVEL_LIMITED_PROFILE, level,
                         "requirefullprofile should not allow level 2 compilation");
             }
         }
         Asserts.assertEQ(CompilerWhiteBoxTest.COMP_LEVEL_FULL_OPTIMIZATION, level,
-                "requirefullprofile trivial Java method should eventually compile at level 4");
+                "requirefullprofile non-trivial Java method should eventually compile at level 4");
+    }
+
+    private static void assertTrivialMethodUsesSimplePath(Method method, String mode) {
+        int level = WB.getMethodCompilationLevel(method);
+        for (int i = 0; i < 200_000 && level != CompilerWhiteBoxTest.COMP_LEVEL_SIMPLE; i++) {
+            sink = switch (mode) {
+                case "accessor" -> ACCESSOR.getValue();
+                case "constant" -> constantGetter();
+                default -> throw new IllegalArgumentException(mode);
+            };
+            level = WB.getMethodCompilationLevel(method);
+            Asserts.assertNE(CompilerWhiteBoxTest.COMP_LEVEL_LIMITED_PROFILE, level,
+                    "requirefullprofile should not allow level 2 compilation");
+        }
+        Asserts.assertEQ(CompilerWhiteBoxTest.COMP_LEVEL_SIMPLE, level,
+                "requirefullprofile accessor and constant getter methods should use the level 1 trivial path");
     }
 
     private static void assertOsrRequestUsesFullProfilePath(Method method) {
@@ -222,5 +284,13 @@ public class RequireFullProfileTest {
         }
         Asserts.assertFalse(WB.isMethodQueuedForCompilation(method), "Method should leave the compile queue");
         Asserts.assertTrue(WB.isMethodCompiled(method), "Method should be compiled");
+    }
+
+    private static class Accessor {
+        private int value = 42;
+
+        public int getValue() {
+            return value;
+        }
     }
 }
