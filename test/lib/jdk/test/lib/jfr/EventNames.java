@@ -146,7 +146,10 @@ public class EventNames {
     public static final String G1EvacuationYoungStatistics = PREFIX + "G1EvacuationYoungStatistics";
     public static final String G1EvacuationOldStatistics = PREFIX + "G1EvacuationOldStatistics";
     public static final String G1BasicIHOP = PREFIX + "G1BasicIHOP";
+    public static final String AllocateMemory = PREFIX + "AllocateMemory";
     public static final String AllocationRequiringGC = PREFIX + "AllocationRequiringGC";
+    public static final String FreeMemory = PREFIX + "FreeMemory";
+    public static final String ReallocateMemory = PREFIX + "ReallocateMemory";
     public static final String GCPhaseParallel = PREFIX + "GCPhaseParallel";
     public static final String GCPhaseConcurrent = PREFIX + "GCPhaseConcurrent";
     public static final String GCPhaseConcurrentLevel1 = PREFIX + "GCPhaseConcurrentLevel1";

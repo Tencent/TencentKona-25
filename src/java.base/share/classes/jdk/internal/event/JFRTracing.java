@@ -30,6 +30,7 @@ import java.io.FileOutputStream;
 import java.io.RandomAccessFile;
 import java.lang.Throwable;
 import java.lang.reflect.Field;
+import jdk.internal.misc.Unsafe;
 
 /**
  * Helper class to enable JFR tracing.
@@ -42,6 +43,7 @@ public final class JFRTracing {
       enable(FileOutputStream.class);
       enable(FileChannelImpl.class);
       enable(RandomAccessFile.class);
+      enable(Unsafe.class);
   }
 
   private static void enable(Class<?> clazz) throws NoSuchFieldException, IllegalAccessException {

@@ -30,6 +30,10 @@ import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
 import sun.nio.ch.DirectBuffer;
 
+import jdk.internal.event.AllocateMemoryEvent;
+import jdk.internal.event.FreeMemoryEvent;
+import jdk.internal.event.ReallocateMemoryEvent;
+
 import java.lang.reflect.Field;
 import java.security.ProtectionDomain;
 
@@ -68,6 +72,8 @@ public final class Unsafe {
     private Unsafe() {}
 
     private static final Unsafe theUnsafe = new Unsafe();
+
+    private static boolean jfrTracing;
 
     /**
      * Provides the caller with the capability of performing unsafe
@@ -633,6 +639,16 @@ public final class Unsafe {
             return 0;
         }
 
+        if (jfrTracing && AllocateMemoryEvent.enabled()) {
+            long start = AllocateMemoryEvent.timestamp();
+            long p = allocateMemory0(bytes);
+            AllocateMemoryEvent.offer(start, bytes, p);
+            if (p == 0) {
+                throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
+            }
+            return p;
+        }
+
         long p = allocateMemory0(bytes);
         if (p == 0) {
             throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
@@ -687,6 +703,16 @@ public final class Unsafe {
         if (bytes == 0) {
             freeMemory(address);
             return 0;
+        }
+
+        if (jfrTracing && ReallocateMemoryEvent.enabled()) {
+            long start = ReallocateMemoryEvent.timestamp();
+            long p = (address == 0) ? allocateMemory0(bytes) : reallocateMemory0(address, bytes);
+            ReallocateMemoryEvent.offer(start, address, p, bytes);
+            if (p == 0) {
+                throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
+            }
+            return p;
         }
 
         long p = (address == 0) ? allocateMemory0(bytes) : reallocateMemory0(address, bytes);
@@ -924,6 +950,13 @@ public final class Unsafe {
         freeMemoryChecks(address);
 
         if (address == 0) {
+            return;
+        }
+
+        if (jfrTracing && FreeMemoryEvent.enabled()) {
+            long start = FreeMemoryEvent.timestamp();
+            freeMemory0(address);
+            FreeMemoryEvent.offer(start, address);
             return;
         }
 

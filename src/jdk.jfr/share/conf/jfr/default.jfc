@@ -800,6 +800,24 @@
       <setting name="throttle">100/s</setting>
     </event>
 
+    <event name="jdk.AllocateMemory">
+      <setting name="enabled">false</setting>
+      <setting name="stackTrace">true</setting>
+      <setting name="threshold">0 ms</setting>
+    </event>
+
+    <event name="jdk.ReallocateMemory">
+      <setting name="enabled">false</setting>
+      <setting name="stackTrace">true</setting>
+      <setting name="threshold">0 ms</setting>
+    </event>
+
+    <event name="jdk.FreeMemory">
+      <setting name="enabled">false</setting>
+      <setting name="stackTrace">true</setting>
+      <setting name="threshold">0 ms</setting>
+    </event>
+
     <event name="jdk.Deserialization">
       <setting name="enabled">false</setting>
       <setting name="stackTrace">true</setting>

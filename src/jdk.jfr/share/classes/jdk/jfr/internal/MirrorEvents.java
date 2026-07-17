@@ -27,6 +27,7 @@ package jdk.jfr.internal;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import jdk.jfr.events.AllocateMemoryEvent;
 import jdk.jfr.events.DeserializationEvent;
 import jdk.jfr.events.ErrorThrownEvent;
 import jdk.jfr.events.ExceptionStatisticsEvent;
@@ -34,7 +35,9 @@ import jdk.jfr.events.ExceptionThrownEvent;
 import jdk.jfr.events.FileForceEvent;
 import jdk.jfr.events.FileReadEvent;
 import jdk.jfr.events.FileWriteEvent;
+import jdk.jfr.events.FreeMemoryEvent;
 import jdk.jfr.events.ProcessStartEvent;
+import jdk.jfr.events.ReallocateMemoryEvent;
 import jdk.jfr.events.SecurityPropertyModificationEvent;
 import jdk.jfr.events.SecurityProviderServiceEvent;
 import jdk.jfr.events.SerializationMisdeclarationEvent;
@@ -57,11 +60,14 @@ final class MirrorEvents {
 
     // Add mirror event mapping here. See MirrorEvent class for details.
     static {
+        register("jdk.internal.event.AllocateMemoryEvent", AllocateMemoryEvent.class);
         register("jdk.internal.event.DeserializationEvent", DeserializationEvent.class);
         register("jdk.internal.event.FileForceEvent", FileForceEvent.class);
         register("jdk.internal.event.FileReadEvent", FileReadEvent.class);
         register("jdk.internal.event.FileWriteEvent", FileWriteEvent.class);
+        register("jdk.internal.event.FreeMemoryEvent", FreeMemoryEvent.class);
         register("jdk.internal.event.ProcessStartEvent", ProcessStartEvent.class);
+        register("jdk.internal.event.ReallocateMemoryEvent", ReallocateMemoryEvent.class);
         register("jdk.internal.event.SecurityPropertyModificationEvent", SecurityPropertyModificationEvent.class);
         register("jdk.internal.event.SecurityProviderServiceEvent", SecurityProviderServiceEvent.class);
         register("jdk.internal.event.SerializationMisdeclarationEvent", SerializationMisdeclarationEvent.class);

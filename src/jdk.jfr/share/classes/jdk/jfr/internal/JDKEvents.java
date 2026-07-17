@@ -56,6 +56,7 @@ public final class JDKEvents {
         ActiveRecordingEvent.class,
         // jdk.internal.event.* classes need their mirror
         // event class to be listed in the MirrorEvents class.
+        jdk.internal.event.AllocateMemoryEvent.class,
         jdk.internal.event.DeserializationEvent.class,
         jdk.internal.event.ErrorThrownEvent.class,
         jdk.internal.event.ExceptionStatisticsEvent.class,
@@ -63,7 +64,9 @@ public final class JDKEvents {
         jdk.internal.event.FileForceEvent.class,
         jdk.internal.event.FileReadEvent.class,
         jdk.internal.event.FileWriteEvent.class,
+        jdk.internal.event.FreeMemoryEvent.class,
         jdk.internal.event.ProcessStartEvent.class,
+        jdk.internal.event.ReallocateMemoryEvent.class,
         jdk.internal.event.SecurityPropertyModificationEvent.class,
         jdk.internal.event.SecurityProviderServiceEvent.class,
         jdk.internal.event.SerializationMisdeclarationEvent.class,
