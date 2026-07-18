@@ -39,12 +39,11 @@ import org.openjdk.jmh.annotations.Warmup;
 /**
  * Benchmarks the SM3 message digest cold path: a fresh
  * {@code MessageDigest} instance per operation. The engine (pure Java
- * vs JNI native via OpenSSL) is controlled by JVM system property.
+ * vs native via OpenSSL FFM) is controlled by JVM system property.
  *
  * <pre>
  *   java -jar benchmarks.jar SM3MessageDigestBench                          # Java
- *   java -Djdk.sun.enableNativeCrypto=true -jar benchmarks.jar ...          # JNI
- *   java -Djdk.sun.enableFFMCrypto=true   -jar benchmarks.jar ...          # FFM
+ *   java -Djdk.sun.enableNativeCrypto=true -jar benchmarks.jar ...          # FFM
  * </pre>
  */
 @State(Scope.Thread)
@@ -65,9 +64,6 @@ public class SM3MessageDigestBench {
     public void setup() {
         inputBytes = new byte[length];
         new Random(1234567890).nextBytes(inputBytes);
-
-        boolean nativeRequested = Boolean.getBoolean(
-                "jdk.sun.enableNativeCrypto");
     }
 
     /**

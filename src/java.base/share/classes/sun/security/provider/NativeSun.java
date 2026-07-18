@@ -20,62 +20,21 @@
 
 package sun.security.provider;
 
-import sun.security.util.OpenSSLUtil;
-
-import java.security.AccessController;
-import java.security.PrivilegedAction;
-
 /**
  * The native implementation with OpenSSL for Sun algorithms.
  */
 final class NativeSun {
 
-    private static final boolean IS_FFM_CRYPTO_ENABLED;
     private static final boolean IS_NATIVE_CRYPTO_ENABLED;
 
     static {
-        // Check FFM crypto first (highest priority)
-        boolean enableFFMCrypto = Boolean.getBoolean(
-                "jdk.sun.enableFFMCrypto");
-        IS_FFM_CRYPTO_ENABLED = enableFFMCrypto
-                && SM3EngineFFM.isAvailable();
-
-        // Check JNI native crypto (fallback)
         boolean enableNativeCrypto = Boolean.getBoolean(
                 "jdk.sun.enableNativeCrypto");
         IS_NATIVE_CRYPTO_ENABLED = enableNativeCrypto
-                // OpenSSL crypto lib must be loaded at first
-                && OpenSSLUtil.isOpenSSLLoaded()
-                && loadSunCryptoLib();
-    }
-
-    // Load lib suncrypto
-    @SuppressWarnings("removal")
-    private static boolean loadSunCryptoLib() {
-        boolean loaded = true;
-        try {
-            AccessController.doPrivileged(
-                    new PrivilegedAction<Void>() {
-                        @SuppressWarnings("restricted")
-                        public Void run() {
-                            System.loadLibrary("suncrypto");
-                            return null;
-                        }
-                    });
-        } catch (UnsatisfiedLinkError e) {
-            System.err.println("Failed to load suncrypto: " + e);
-            loaded = false;
-        }
-        return loaded;
-    }
-
-    static boolean isFFMCryptoEnabled() {
-        return IS_FFM_CRYPTO_ENABLED;
+                && SM3EngineFFM.isAvailable();
     }
 
     static boolean isNativeCryptoEnabled() {
         return IS_NATIVE_CRYPTO_ENABLED;
     }
-
-    public static native void sm3Digest(byte[] message, byte[] out, int outOffset);
 }
