@@ -95,6 +95,7 @@
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.hpp"
@@ -110,6 +111,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/vmThread.hpp"
@@ -120,6 +122,26 @@
 #include "utilities/stack.inline.hpp"
 
 size_t G1CollectedHeap::_humongous_object_threshold_in_words = 0;
+
+// Called by the allocating Java thread without Heap_lock held, since stack
+// walking and synchronous log output may block.
+static void log_humongous_allocation(size_t word_size) {
+  if (!log_is_enabled(Debug, gc, humongous)) {
+    return;
+  }
+
+  JavaThread* current = JavaThread::current();
+  ResourceMark rm(current);
+  // Report a mounted virtual thread rather than its carrier thread.
+  const char* thread_name = JavaThread::name_for(current->vthread_or_thread());
+
+  // Keep the complete stack together when multiple threads allocate concurrently.
+  LogMessage(gc, humongous) message;
+  NonInterleavingLogStream log{LogLevel::Debug, message};
+  log.print_cr("Humongous object allocation succeeded: size %zuB, Java thread \"%s\", stack trace:",
+               word_size * HeapWordSize, thread_name);
+  current->print_active_stack_on(&log);
+}
 
 // INVARIANTS/NOTES
 //
@@ -680,11 +702,16 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       if (result != nullptr) {
         policy()->old_gen_alloc_tracker()->
           add_allocated_humongous_bytes_since_last_gc(size_in_regions * G1HeapRegion::GrainBytes);
-        return result;
+      } else {
+        // Read the GC count while still holding the Heap_lock.
+        gc_count_before = total_collections();
       }
+    }
 
-      // Read the GC count while still holding the Heap_lock.
-      gc_count_before = total_collections();
+    if (result != nullptr) {
+      // Heap_lock has been released before performing potentially blocking logging.
+      log_humongous_allocation(word_size);
+      return result;
     }
 
     bool succeeded;
@@ -696,6 +723,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
         size_t size_in_regions = humongous_obj_size_in_regions(word_size);
         policy()->old_gen_alloc_tracker()->
           record_collection_pause_humongous_allocation(size_in_regions * G1HeapRegion::GrainBytes);
+        log_humongous_allocation(word_size);
       }
       return result;
     }
