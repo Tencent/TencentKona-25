@@ -53,6 +53,7 @@ class methodHandle;
   option(Inline,  "inline", Bool) \
   option(DontInline,  "dontinline", Bool) \
   option(Blackhole,  "blackhole", Bool) \
+  option(RequireFullProfile, "requirefullprofile", Bool) \
   option(CompileOnly, "compileonly", Bool)\
   option(Exclude, "exclude", Bool) \
   option(Break, "break", Bool) \
