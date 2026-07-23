@@ -469,6 +469,10 @@ private:
   // potentially schedule a GC pause.
   HeapWord* attempt_allocation_humongous(size_t word_size);
 
+  // Logs the identity and Java call stack of the thread that allocated a
+  // humongous object, under -Xlog:gc+humongous=debug.
+  void log_humongous_allocation_call_stack(size_t word_size, HeapWord* obj);
+
   // Allocation attempt that should be called during safepoints (e.g.,
   // at the end of a successful GC). expect_null_mutator_alloc_region
   // specifies whether the mutator alloc region is expected to be null

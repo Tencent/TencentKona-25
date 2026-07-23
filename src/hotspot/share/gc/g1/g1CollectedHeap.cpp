@@ -24,6 +24,7 @@
 
 #include "classfile/classLoaderDataGraph.hpp"
 #include "classfile/metadataOnStackMark.hpp"
+#include "classfile/javaClasses.hpp"
 #include "classfile/systemDictionary.hpp"
 #include "code/codeCache.hpp"
 #include "compiler/oopMap.hpp"
@@ -95,6 +96,7 @@
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.hpp"
@@ -110,6 +112,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/vmThread.hpp"
@@ -633,6 +636,45 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t min_word_size,
   return result;
 }
 
+void G1CollectedHeap::log_humongous_allocation_call_stack(size_t word_size, HeapWord* obj) {
+  if (!log_is_enabled(Debug, gc, humongous)) {
+    return;
+  }
+
+  ResourceMark rm;
+  Thread* current = Thread::current();
+
+  // Build the whole message (header line plus stack trace) into a single
+  // buffer and emit it with one log statement. This keeps the output of
+  // threads that allocate humongous objects concurrently from interleaving.
+  stringStream ss;
+  ss.print("Humongous allocation of %zu bytes at " PTR_FORMAT " by thread \"%s\"",
+           word_size * HeapWordSize, p2i(obj), current->name());
+
+  if (current->is_Java_thread()) {
+    JavaThread* jt = JavaThread::cast(current);
+    if (jt->is_vthread_mounted()) {
+      // The allocation ran on a virtual thread mounted on this carrier.
+      // Report the virtual thread id and print the virtual thread's stack
+      // rather than the carrier's.
+      oop vt = jt->vthread();
+      if (vt != nullptr) {
+        ss.print(" (carrier of virtual thread #" INT64_FORMAT ")",
+                 java_lang_Thread::thread_id(vt));
+      }
+      ss.cr();
+      jt->print_vthread_stack_on(&ss);
+    } else {
+      ss.cr();
+      jt->print_stack_on(&ss);
+    }
+  } else {
+    ss.cr();
+  }
+
+  log_debug(gc, humongous)("%s", ss.base());
+}
+
 HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   ResourceMark rm; // For retrieving the thread names in log messages.
 
@@ -680,11 +722,17 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       if (result != nullptr) {
         policy()->old_gen_alloc_tracker()->
           add_allocated_humongous_bytes_since_last_gc(size_in_regions * G1HeapRegion::GrainBytes);
-        return result;
+      } else {
+        // Read the GC count while still holding the Heap_lock.
+        gc_count_before = total_collections();
       }
+    }
 
-      // Read the GC count while still holding the Heap_lock.
-      gc_count_before = total_collections();
+    if (result != nullptr) {
+      // Log outside the Heap_lock critical section so that walking the Java
+      // stack does not serialize concurrent humongous allocations.
+      log_humongous_allocation_call_stack(word_size, result);
+      return result;
     }
 
     bool succeeded;
@@ -696,6 +744,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
         size_t size_in_regions = humongous_obj_size_in_regions(word_size);
         policy()->old_gen_alloc_tracker()->
           record_collection_pause_humongous_allocation(size_in_regions * G1HeapRegion::GrainBytes);
+        log_humongous_allocation_call_stack(word_size, result);
       }
       return result;
     }
