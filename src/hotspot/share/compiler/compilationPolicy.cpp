@@ -1373,6 +1373,12 @@ CompLevel CompilationPolicy::transition_from_none(const methodHandle& method, Co
       next_level = CompLevel_full_profile;
     }
   }
+  // Override: if requirefullprofile is set, skip Tier 2 (limited profile)
+  // to ensure C2 always receives complete profiling data.
+  if (next_level == CompLevel_limited_profile &&
+      CompilerOracle::has_option(method, CompileCommandEnum::RequireFullProfile)) {
+    next_level = CompLevel_full_profile;
+  }
   return next_level;
 }
 
