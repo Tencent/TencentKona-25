@@ -420,6 +420,12 @@ private:
   // null if unsuccessful.
   HeapWord* humongous_obj_allocate(size_t word_size);
 
+  // Logs, at the gc+humongous=debug level, the name and Java call stack of
+  // the thread that initiated a successful humongous allocation, to help
+  // locate the source of large objects. No-op when the tag is disabled or
+  // the current thread is not a Java thread with Java frames to walk.
+  void log_humongous_allocation(size_t word_size, HeapWord* result);
+
   // The following two methods, allocate_new_tlab() and
   // mem_allocate(), are the two main entry points from the runtime
   // into the G1's allocation routines. They have the following

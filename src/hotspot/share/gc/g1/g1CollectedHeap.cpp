@@ -95,6 +95,7 @@
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.hpp"
@@ -110,6 +111,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/vmThread.hpp"
@@ -633,6 +635,40 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t min_word_size,
   return result;
 }
 
+// Logs, at the gc+humongous=debug level, the name and Java call stack of the
+// thread that initiated a successful humongous allocation, to help locate the
+// source of large objects. It is a no-op when the tag is disabled (so there is
+// no cost on the normal allocation path) or when the current thread is not a
+// Java thread with Java frames to walk. Note that humongous objects allocated
+// on behalf of a mutator during a GC pause are attributed here on the mutator's
+// normal return path, where Thread::current() is the initiating Java thread.
+void G1CollectedHeap::log_humongous_allocation(size_t word_size, HeapWord* result) {
+  LogTarget(Debug, gc, humongous) lt;
+  if (!lt.is_enabled()) {
+    return;
+  }
+
+  Thread* current = Thread::current();
+  if (!current->is_Java_thread()) {
+    return;
+  }
+
+  JavaThread* jt = JavaThread::cast(current);
+  ResourceMark rm;
+  LogStream ls(lt);
+  ls.print_cr("Humongous allocation succeeded: %zu bytes in %zu regions at "
+              PTR_FORMAT ", thread \"%s\"",
+              word_size * HeapWordSize,
+              humongous_obj_size_in_regions(word_size),
+              p2i(result),
+              jt->name());
+  if (jt->has_last_Java_frame()) {
+    jt->print_stack_on(&ls);
+  } else {
+    ls.print_cr("\t(no Java frames on stack)");
+  }
+}
+
 HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   ResourceMark rm; // For retrieving the thread names in log messages.
 
@@ -680,6 +716,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       if (result != nullptr) {
         policy()->old_gen_alloc_tracker()->
           add_allocated_humongous_bytes_since_last_gc(size_in_regions * G1HeapRegion::GrainBytes);
+        log_humongous_allocation(word_size, result);
         return result;
       }
 
@@ -696,6 +733,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
         size_t size_in_regions = humongous_obj_size_in_regions(word_size);
         policy()->old_gen_alloc_tracker()->
           record_collection_pause_humongous_allocation(size_in_regions * G1HeapRegion::GrainBytes);
+        log_humongous_allocation(word_size, result);
       }
       return result;
     }
