@@ -642,10 +642,10 @@ public final class Unsafe {
         if (jfrTracing && AllocateMemoryEvent.enabled()) {
             long start = AllocateMemoryEvent.timestamp();
             long p = allocateMemory0(bytes);
-            AllocateMemoryEvent.offer(start, bytes, p);
             if (p == 0) {
                 throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
             }
+            AllocateMemoryEvent.offer(start, bytes, p);
             return p;
         }
 
@@ -708,10 +708,10 @@ public final class Unsafe {
         if (jfrTracing && ReallocateMemoryEvent.enabled()) {
             long start = ReallocateMemoryEvent.timestamp();
             long p = (address == 0) ? allocateMemory0(bytes) : reallocateMemory0(address, bytes);
-            ReallocateMemoryEvent.offer(start, address, p, bytes);
             if (p == 0) {
                 throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
             }
+            ReallocateMemoryEvent.offer(start, address, p, bytes);
             return p;
         }
 

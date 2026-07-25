@@ -36,6 +36,7 @@ import jdk.jfr.internal.MirrorEvent;
 @Label("Reallocate Memory")
 @Category("Java Application")
 @Description("Reallocation of native memory via Unsafe.reallocateMemory")
+@StackFilter("jdk.internal.misc.Unsafe")
 public final class ReallocateMemoryEvent extends MirrorEvent {
 
     @Label("Old Address")

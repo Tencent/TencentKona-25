@@ -49,6 +49,8 @@ public class TestUnsafeMemoryEvents {
         testFreeMemoryZeroAddress();
         testReallocateMemoryZeroSize();
         testReallocateMemoryZeroAddress();
+        testAllocateMemoryFailed();
+        testReallocateMemoryFailed();
     }
 
     private static void testNormalPath() throws Exception {
@@ -93,8 +95,6 @@ public class TestUnsafeMemoryEvents {
             verifyFreeMemoryEvent(events, reallocAddrSaved);
         }
     }
-
-    // ---- edge cases ----
 
     private static void testAllocateMemoryZeroSize() throws Exception {
         try (Recording recording = new Recording()) {
@@ -145,7 +145,6 @@ public class TestUnsafeMemoryEvents {
 
             long addr = U.allocateMemory(ALLOC_SIZE);
             long newAddr = U.reallocateMemory(addr, 0);
-            // addr was freed internally by reallocateMemory(bytes==0)
 
             recording.stop();
 
@@ -153,7 +152,6 @@ public class TestUnsafeMemoryEvents {
 
             List<RecordedEvent> events = Events.fromRecording(recording);
 
-            // Should NOT have ReallocateMemory event
             long reallocCount = events.stream()
                     .filter(e -> e.getEventType().getName().equals(EventNames.ReallocateMemory))
                     .count();
@@ -265,5 +263,60 @@ public class TestUnsafeMemoryEvents {
                 "address should match the freed address");
         Asserts.assertGTE(event.getDuration(), Duration.ZERO,
                 "duration should be >= 0");
+    }
+
+    private static void testAllocateMemoryFailed() throws Exception {
+        try (Recording recording = new Recording()) {
+            recording.enable(EventNames.AllocateMemory)
+                    .withThreshold(Duration.ofNanos(0));
+            recording.start();
+
+            try {
+                U.allocateMemory(Long.MAX_VALUE);
+                Asserts.fail("Expected OutOfMemoryError not thrown");
+            } catch (OutOfMemoryError expected) {
+                // expected — malloc failed
+            } catch (IllegalArgumentException expected) {
+                // also acceptable — input validation rejected size
+            }
+
+            recording.stop();
+
+            List<RecordedEvent> events = Events.fromRecording(recording);
+            long count = events.stream()
+                    .filter(e -> e.getEventType().getName().equals(EventNames.AllocateMemory))
+                    .count();
+            Asserts.assertEquals(0L, count,
+                    "Failed allocation should not trigger AllocateMemory event");
+        }
+    }
+
+    private static void testReallocateMemoryFailed() throws Exception {
+        try (Recording recording = new Recording()) {
+            recording.enable(EventNames.ReallocateMemory)
+                    .withThreshold(Duration.ofNanos(0));
+            recording.start();
+
+            long addr = U.allocateMemory(ALLOC_SIZE);
+            try {
+                U.reallocateMemory(addr, Long.MAX_VALUE);
+                Asserts.fail("Expected OutOfMemoryError not thrown");
+            } catch (OutOfMemoryError expected) {
+                // expected — realloc failed
+            } catch (IllegalArgumentException expected) {
+                // also acceptable — input validation rejected size
+            } finally {
+                U.freeMemory(addr);
+            }
+
+            recording.stop();
+
+            List<RecordedEvent> events = Events.fromRecording(recording);
+            long count = events.stream()
+                    .filter(e -> e.getEventType().getName().equals(EventNames.ReallocateMemory))
+                    .count();
+            Asserts.assertEquals(0L, count,
+                    "Failed reallocation should not trigger ReallocateMemory event");
+        }
     }
 }

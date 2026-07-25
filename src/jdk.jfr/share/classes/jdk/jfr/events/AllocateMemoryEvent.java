@@ -36,6 +36,7 @@ import jdk.jfr.internal.MirrorEvent;
 @Label("Allocate Memory")
 @Category("Java Application")
 @Description("Allocation of native memory via Unsafe.allocateMemory")
+@StackFilter("jdk.internal.misc.Unsafe")
 public final class AllocateMemoryEvent extends MirrorEvent {
 
     @Label("Bytes")

@@ -35,6 +35,7 @@ import jdk.jfr.internal.MirrorEvent;
 @Label("Free Memory")
 @Category("Java Application")
 @Description("Deallocation of native memory via Unsafe.freeMemory")
+@StackFilter("jdk.internal.misc.Unsafe")
 public final class FreeMemoryEvent extends MirrorEvent {
 
     @Label("Address")
