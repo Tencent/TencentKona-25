@@ -95,6 +95,7 @@
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.hpp"
@@ -110,6 +111,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/vmThread.hpp"
@@ -633,6 +635,34 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t min_word_size,
   return result;
 }
 
+// Called after a successful humongous allocation, on the allocating Java
+// thread and outside Heap_lock. Stack walking and synchronous logging can be
+// relatively slow, so this must not run while holding the heap lock.
+static void log_successful_humongous_allocation(size_t word_size, HeapWord* result, size_t region_count) {
+  if (!log_is_enabled(Debug, gc, humongous)) {
+    return;
+  }
+
+  Thread* current = Thread::current();
+  assert(current->is_Java_thread(), "humongous allocations should be initiated by Java threads");
+  JavaThread* java_thread = JavaThread::cast(current);
+  ResourceMark rm(java_thread);
+  oop thread_oop = java_thread->vthread_or_thread();
+  assert(thread_oop != nullptr, "Java thread object should be available for humongous allocation logging");
+  const char* thread_name = JavaThread::name_for(thread_oop);
+
+  // Emit the allocation header and Java stack as one log message so concurrent
+  // humongous allocation logs do not interleave.
+  LogMessage(gc, humongous) message;
+  NonInterleavingLogStream log(LogLevel::Debug, message);
+  log.print_cr("Humongous allocation succeeded: object " PTR_FORMAT
+               ", size %zu bytes, regions %zu, Java thread \"%s\"",
+               p2i(result), word_size * HeapWordSize, region_count, thread_name);
+  log.print_cr("Java call stack:");
+  assert(java_thread->has_last_Java_frame(), "Java frame should be available for humongous allocation logging");
+  java_thread->print_active_stack_on(&log);
+}
+
 HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   ResourceMark rm; // For retrieving the thread names in log messages.
 
@@ -665,26 +695,31 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
   // successfully schedule a collection which fails to perform the allocation.
   // Case b) is the only case when we'll return null.
   HeapWord* result = nullptr;
+  const size_t region_count = humongous_obj_size_in_regions(word_size);
   for (uint try_count = 1; /* we'll return */; try_count++) {
-    uint gc_count_before;
+    uint gc_count_before = 0;
 
 
     {
       MutexLocker x(Heap_lock);
 
-      size_t size_in_regions = humongous_obj_size_in_regions(word_size);
       // Given that humongous objects are not allocated in young
       // regions, we'll first try to do the allocation without doing a
       // collection hoping that there's enough space in the heap.
       result = humongous_obj_allocate(word_size);
       if (result != nullptr) {
         policy()->old_gen_alloc_tracker()->
-          add_allocated_humongous_bytes_since_last_gc(size_in_regions * G1HeapRegion::GrainBytes);
-        return result;
+          add_allocated_humongous_bytes_since_last_gc(region_count * G1HeapRegion::GrainBytes);
+      } else {
+        // Read the GC count while still holding the Heap_lock.
+        gc_count_before = total_collections();
       }
+    }
 
-      // Read the GC count while still holding the Heap_lock.
-      gc_count_before = total_collections();
+    if (result != nullptr) {
+      // Log after releasing Heap_lock; the logging path walks the Java stack.
+      log_successful_humongous_allocation(word_size, result, region_count);
+      return result;
     }
 
     bool succeeded;
@@ -693,9 +728,9 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       log_trace(gc, alloc)("%s: Successfully scheduled collection returning " PTR_FORMAT,
                            Thread::current()->name(), p2i(result));
       if (result != nullptr) {
-        size_t size_in_regions = humongous_obj_size_in_regions(word_size);
         policy()->old_gen_alloc_tracker()->
-          record_collection_pause_humongous_allocation(size_in_regions * G1HeapRegion::GrainBytes);
+          record_collection_pause_humongous_allocation(region_count * G1HeapRegion::GrainBytes);
+        log_successful_humongous_allocation(word_size, result, region_count);
       }
       return result;
     }
