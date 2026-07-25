@@ -25,6 +25,10 @@
 
 package jdk.internal.misc;
 
+import jdk.internal.event.JavaNativeAllocationEvent;
+import jdk.internal.event.JavaNativeReallocateEvent;
+import jdk.internal.event.JavaNativeFreeEvent;
+
 import jdk.internal.ref.Cleaner;
 import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
@@ -633,9 +637,14 @@ public final class Unsafe {
             return 0;
         }
 
+        boolean eventEnabled = JavaNativeAllocationEvent.enabled();
+        long startTime = eventEnabled ? JavaNativeAllocationEvent.timestamp() : 0;
         long p = allocateMemory0(bytes);
         if (p == 0) {
             throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
+        }
+        if (eventEnabled) {
+            JavaNativeAllocationEvent.offer(startTime, p, bytes);
         }
 
         return p;
@@ -689,9 +698,14 @@ public final class Unsafe {
             return 0;
         }
 
+        boolean eventEnabled = JavaNativeReallocateEvent.enabled();
+        long startTime = eventEnabled ? JavaNativeReallocateEvent.timestamp() : 0;
         long p = (address == 0) ? allocateMemory0(bytes) : reallocateMemory0(address, bytes);
         if (p == 0) {
             throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
+        }
+        if (eventEnabled) {
+            JavaNativeReallocateEvent.offer(startTime, address, p, bytes);
         }
 
         return p;
@@ -927,7 +941,12 @@ public final class Unsafe {
             return;
         }
 
+        boolean eventEnabled = JavaNativeFreeEvent.enabled();
+        long startTime = eventEnabled ? JavaNativeFreeEvent.timestamp() : 0;
         freeMemory0(address);
+        if (eventEnabled) {
+            JavaNativeFreeEvent.offer(startTime, address);
+        }
     }
 
     /**

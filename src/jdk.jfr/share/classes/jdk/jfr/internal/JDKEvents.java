@@ -80,6 +80,9 @@ public final class JDKEvents {
         InitialSecurityPropertyEvent.class,
         MethodTraceEvent.class,
         MethodTimingEvent.class,
+        jdk.internal.event.JavaNativeAllocationEvent.class,
+        jdk.internal.event.JavaNativeReallocateEvent.class,
+        jdk.internal.event.JavaNativeFreeEvent.class,
     };
 
     private static final Runnable emitExceptionStatistics = JDKEvents::emitExceptionStatistics;

@@ -47,6 +47,9 @@ import jdk.jfr.events.VirtualThreadStartEvent;
 import jdk.jfr.events.VirtualThreadSubmitFailedEvent;
 import jdk.jfr.events.X509CertificateEvent;
 import jdk.jfr.events.X509ValidationEvent;
+import jdk.jfr.events.JavaNativeAllocationEvent;
+import jdk.jfr.events.JavaNativeReallocateEvent;
+import jdk.jfr.events.JavaNativeFreeEvent;
 import jdk.jfr.internal.util.Utils;
 
 /**
@@ -77,6 +80,9 @@ final class MirrorEvents {
         register("jdk.internal.event.ErrorThrownEvent", ErrorThrownEvent.class);
         register("jdk.internal.event.ExceptionStatisticsEvent", ExceptionStatisticsEvent.class);
         register("jdk.internal.event.ExceptionThrownEvent", ExceptionThrownEvent.class);
+        register("jdk.internal.event.JavaNativeAllocationEvent", JavaNativeAllocationEvent.class);
+        register("jdk.internal.event.JavaNativeReallocateEvent", JavaNativeReallocateEvent.class);
+        register("jdk.internal.event.JavaNativeFreeEvent", JavaNativeFreeEvent.class);
     };
 
     private static void register(String eventClassName, Class<? extends MirrorEvent> mirrorClass) {

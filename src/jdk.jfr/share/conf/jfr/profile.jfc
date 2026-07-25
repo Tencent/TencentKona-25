@@ -1197,4 +1197,25 @@
       <flag name="class-loading" label="Class Loading">false</flag>
     </control>
 
+    <event name="jdk.JavaNativeAllocation">
+      <setting name="enabled">false</setting>
+      <setting name="stackTrace">true</setting>
+      <setting name="threshold">0 ms</setting>
+      <setting name="throttle">off</setting>
+    </event>
+
+    <event name="jdk.JavaNativeReallocate">
+      <setting name="enabled">false</setting>
+      <setting name="stackTrace">true</setting>
+      <setting name="threshold">0 ms</setting>
+      <setting name="throttle">off</setting>
+    </event>
+
+    <event name="jdk.JavaNativeFree">
+      <setting name="enabled">false</setting>
+      <setting name="stackTrace">true</setting>
+      <setting name="threshold">0 ms</setting>
+      <setting name="throttle">off</setting>
+    </event>
+
 </configuration>
