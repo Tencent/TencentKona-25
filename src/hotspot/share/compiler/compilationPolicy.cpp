@@ -72,6 +72,32 @@ int CompilationPolicy::compiler_count(CompLevel comp_level) {
   return 0;
 }
 
+static bool requires_full_profile(const methodHandle& method) {
+  return TieredCompilation &&
+         CompilationModeFlag::normal() &&
+         TieredStopAtLevel >= CompLevel_full_profile &&
+         CompilerOracle::has_option(method, CompileCommandEnum::RequireFullProfile);
+}
+
+static CompLevel adjust_level_for_require_full_profile(const methodHandle& method,
+                                                       CompLevel cur_level,
+                                                       CompLevel next_level) {
+  if (!requires_full_profile(method)) {
+    return next_level;
+  }
+
+  if (next_level == CompLevel_limited_profile) {
+    return CompLevel_full_profile;
+  }
+
+  if (next_level == CompLevel_full_optimization &&
+      cur_level < CompLevel_full_profile) {
+    return CompLevel_full_profile;
+  }
+
+  return next_level;
+}
+
 // Returns true if m must be compiled before executing it
 // This is intended to force compiles for methods (usually for
 // debugging) that would otherwise be interpreted for some reason.
@@ -808,19 +834,21 @@ CompileTask* CompilationPolicy::select_task(CompileQueue* compile_queue, JavaThr
 
   if (max_task != nullptr && max_task->comp_level() == CompLevel_full_profile && TieredStopAtLevel > CompLevel_full_profile &&
       max_method != nullptr && is_method_profiled(max_method_h) && !Arguments::is_compiler_only()) {
-    max_task->set_comp_level(CompLevel_limited_profile);
+    if (!requires_full_profile(max_method_h)) {
+      max_task->set_comp_level(CompLevel_limited_profile);
 
-    if (CompileBroker::compilation_is_complete(max_method_h, max_task->osr_bci(), CompLevel_limited_profile)) {
-      if (PrintTieredEvents) {
-        print_event(REMOVE_FROM_QUEUE, max_method, max_method, max_task->osr_bci(), (CompLevel)max_task->comp_level());
+      if (CompileBroker::compilation_is_complete(max_method_h, max_task->osr_bci(), CompLevel_limited_profile)) {
+        if (PrintTieredEvents) {
+          print_event(REMOVE_FROM_QUEUE, max_method, max_method, max_task->osr_bci(), (CompLevel)max_task->comp_level());
+        }
+        compile_queue->remove_and_mark_stale(max_task);
+        max_method->clear_queued_for_compilation();
+        return nullptr;
       }
-      compile_queue->remove_and_mark_stale(max_task);
-      max_method->clear_queued_for_compilation();
-      return nullptr;
-    }
 
-    if (PrintTieredEvents) {
-      print_event(UPDATE_IN_QUEUE, max_method, max_method, max_task->osr_bci(), (CompLevel)max_task->comp_level());
+      if (PrintTieredEvents) {
+        print_event(UPDATE_IN_QUEUE, max_method, max_method, max_task->osr_bci(), (CompLevel)max_task->comp_level());
+      }
     }
   }
   return max_task;
@@ -1373,7 +1401,7 @@ CompLevel CompilationPolicy::transition_from_none(const methodHandle& method, Co
       next_level = CompLevel_full_profile;
     }
   }
-  return next_level;
+  return adjust_level_for_require_full_profile(method, cur_level, next_level);
 }
 
 template<typename Predicate>
@@ -1420,6 +1448,7 @@ CompLevel CompilationPolicy::transition_from_limited_profile(const methodHandle&
       next_level = CompLevel_full_profile;
     }
   }
+  next_level = adjust_level_for_require_full_profile(method, cur_level, next_level);
   if (next_level == CompLevel_full_profile && is_method_profiled(method)) {
     next_level = CompLevel_full_optimization;
   }
@@ -1450,7 +1479,7 @@ CompLevel CompilationPolicy::call_event(const methodHandle& method, CompLevel cu
     next_level = cur_level;
   }
 #endif
-  return next_level;
+  return adjust_level_for_require_full_profile(method, cur_level, next_level);
 }
 
 // Determine if we should do an OSR compilation of a given method.
@@ -1461,10 +1490,10 @@ CompLevel CompilationPolicy::loop_event(const methodHandle& method, CompLevel cu
     // for the transition.
     CompLevel osr_level = MIN2((CompLevel)method->highest_osr_comp_level(), next_level);
     if (osr_level > CompLevel_none) {
-      return osr_level;
+      next_level = osr_level;
     }
   }
-  return next_level;
+  return adjust_level_for_require_full_profile(method, cur_level, next_level);
 }
 
 // Handle the invocation event.
@@ -1553,4 +1582,3 @@ void CompilationPolicy::method_back_branch_event(const methodHandle& mh, const m
     }
   }
 }
-

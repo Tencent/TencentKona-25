@@ -126,6 +126,40 @@ volatile bool CompileBroker::_should_block = false;
 volatile int  CompileBroker::_print_compilation_warning = 0;
 volatile jint CompileBroker::_should_compile_new_jobs = run_compilation;
 
+static bool requires_full_profile_for_compile_request(const methodHandle& method) {
+  return TieredCompilation &&
+         CompilationModeFlag::normal() &&
+         TieredStopAtLevel >= CompLevel_full_profile &&
+         CompilerOracle::has_option(method, CompileCommandEnum::RequireFullProfile);
+}
+
+static bool is_simple_path_method(const methodHandle& method) {
+  return method->is_accessor() || method->is_constant_getter() || method->is_native();
+}
+
+static CompLevel adjust_comp_level_for_require_full_profile(const methodHandle& method,
+                                                            int osr_bci,
+                                                            CompLevel next_level) {
+  if (!requires_full_profile_for_compile_request(method)) {
+    return next_level;
+  }
+
+  if (next_level == CompLevel_limited_profile) {
+    return CompLevel_full_profile;
+  }
+
+  CompLevel cur_level = (osr_bci == InvocationEntryBci)
+      ? (CompLevel)method->highest_comp_level()
+      : (CompLevel)method->highest_osr_comp_level();
+  if (next_level == CompLevel_full_optimization &&
+      cur_level < CompLevel_full_profile &&
+      !is_simple_path_method(method)) {
+    return CompLevel_full_profile;
+  }
+
+  return next_level;
+}
+
 // The installed compiler(s)
 AbstractCompiler* CompileBroker::_compilers[2];
 
@@ -1357,6 +1391,7 @@ nmethod* CompileBroker::compile_method(const methodHandle& method, int osr_bci,
                                        int hot_count,
                                        CompileTask::CompileReason compile_reason,
                                        TRAPS) {
+  comp_level = adjust_comp_level_for_require_full_profile(method, osr_bci, (CompLevel)comp_level);
   // Do nothing if compilebroker is not initialized or compiles are submitted on level none
   if (!_initialized || comp_level == CompLevel_none) {
     return nullptr;

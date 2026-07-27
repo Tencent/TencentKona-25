@@ -71,6 +71,7 @@ class methodHandle;
   option(PrintDependencies, "PrintDependencies", Bool) \
   option(BackgroundCompilation, "BackgroundCompilation", Bool) \
   option(RepeatCompilation, "RepeatCompilation", Intx) \
+  option(RequireFullProfile, "requirefullprofile", Bool) \
   option(ReplayInline,   "ReplayInline", Bool) \
   option(DumpReplay,     "DumpReplay", Bool) \
   option(DumpInline,     "DumpInline", Bool) \
