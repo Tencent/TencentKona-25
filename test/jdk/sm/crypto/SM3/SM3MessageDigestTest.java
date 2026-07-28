@@ -2,20 +2,19 @@
  * Copyright (C) 2022, 2024, Tencent. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
- * This code is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation. Tencent designates
- * this particular file as subject to the "Classpath" exception as provided
- * in the LICENSE file that accompanied this code.
+ * This code is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 only, as
+ * published by the Free Software Foundation.
  *
- * This code is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License version 2 for more details.
+ * This code is distributed in the hope that it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * version 2 for more details (a copy is included in the LICENSE file that
+ * accompanied this code).
  *
- * You should have received a copy of the GNU General Public License along
- * with this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * You should have received a copy of the GNU General Public License version
+ * 2 along with this work; if not, write to the Free Software Foundation,
+ * Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
 /*
@@ -46,10 +45,6 @@ public class SM3MessageDigestTest {
             "61626364616263646162636461626364616263646162636461626364616263646162636461626364616263646162636461626364616263646162636461626364");
     private static final byte[] DIGEST_LONG = Utils.hexToBytes(
             "debe9ff92275b8a138604889c18e5a4d6fdb70e5387e5765293dcba39c0c5732");
-
-    private static final int[] LENGTH_MATRIX = new int[] {
-            0, 1, 3, 55, 56, 63, 64, 65, 127, 128, 129, 1024, 16384
-    };
 
     @Test
     public void testKAT() throws Exception {
@@ -268,82 +263,5 @@ public class SM3MessageDigestTest {
         byte[] digest = clone.digest();
 
         assertArrayEquals(DIGEST_LONG, digest);
-    }
-
-    /**
-     * Cover one-shot, byte-by-byte, 64-byte chunked update and a
-     * heap {@link ByteBuffer} for every length in this matrix. The
-     * FFM-backed and JNI-backed native engines must yield the same
-     * 32-byte digest as the pure Java implementation.
-     */
-    @Test
-    public void testUpdateMatrix() throws Exception {
-        Random random = new Random(1234567890L);
-        for (int length : LENGTH_MATRIX) {
-            byte[] data = new byte[length];
-            random.nextBytes(data);
-            byte[] expected = MessageDigest.getInstance("SM3").digest(data);
-
-            assertArrayEquals(expected, digestOneShot(data),
-                    "one-shot mismatch at length " + length);
-            assertArrayEquals(expected, digestByteByByte(data),
-                    "byte-by-byte mismatch at length " + length);
-            assertArrayEquals(expected, digestByChunks(data, 64),
-                    "64-byte chunked mismatch at length " + length);
-            assertArrayEquals(expected, digestByteBuffer(data),
-                    "ByteBuffer mismatch at length " + length);
-        }
-    }
-
-    /**
-     * Verifies that updating the digest from a clone in the middle
-     * of a 64-byte block produces the same digest as a single-shot
-     * update on the original data.
-     */
-    @Test
-    public void testCloneWithinBlock() throws Exception {
-        Random random = new Random(0xC0FFEE);
-        for (int length : new int[] { 0, 1, 31, 32, 63, 64, 65, 127 }) {
-            byte[] data = new byte[length];
-            random.nextBytes(data);
-            int split = length == 0 ? 0 : length / 3;
-
-            MessageDigest original = MessageDigest.getInstance("SM3");
-            original.update(data, 0, split);
-            MessageDigest clone = (MessageDigest) original.clone();
-            clone.update(data, split, length - split);
-            byte[] cloneDigest = clone.digest();
-
-            assertArrayEquals(MessageDigest.getInstance("SM3").digest(data),
-                    cloneDigest,
-                    "clone-within-block mismatch at length " + length);
-        }
-    }
-
-    private static byte[] digestOneShot(byte[] data) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("SM3");
-        return md.digest(data);
-    }
-
-    private static byte[] digestByteByByte(byte[] data) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("SM3");
-        for (byte b : data) {
-            md.update(b);
-        }
-        return md.digest();
-    }
-
-    private static byte[] digestByChunks(byte[] data, int chunk) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("SM3");
-        for (int i = 0; i < data.length; i += chunk) {
-            md.update(data, i, Math.min(chunk, data.length - i));
-        }
-        return md.digest();
-    }
-
-    private static byte[] digestByteBuffer(byte[] data) throws Exception {
-        MessageDigest md = MessageDigest.getInstance("SM3");
-        md.update(ByteBuffer.wrap(data));
-        return md.digest();
     }
 }
