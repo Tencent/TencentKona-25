@@ -95,6 +95,7 @@
 #include "gc/shared/weakProcessor.inline.hpp"
 #include "gc/shared/workerPolicy.hpp"
 #include "logging/log.hpp"
+#include "logging/logStream.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/iterator.hpp"
@@ -110,6 +111,7 @@
 #include "runtime/handles.inline.hpp"
 #include "runtime/init.hpp"
 #include "runtime/java.hpp"
+#include "runtime/javaThread.hpp"
 #include "runtime/orderAccess.hpp"
 #include "runtime/threadSMR.hpp"
 #include "runtime/vmThread.hpp"
@@ -337,6 +339,38 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(G1HeapRegion* first_h
 size_t G1CollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
   assert(is_humongous(word_size), "Object of size %zu must be humongous here", word_size);
   return align_up(word_size, G1HeapRegion::GrainWords) / G1HeapRegion::GrainWords;
+}
+
+static void log_humongous_allocation(HeapWord* result, size_t word_size, size_t size_in_regions) {
+  LogMessage(gc, humongous) lm;
+  if (!lm.is_debug()) {
+    return;
+  }
+
+  Thread* current = Thread::current();
+  NonInterleavingLogStream stream(LogLevel::Debug, lm);
+  if (current->is_Java_thread()) {
+    JavaThread* current_java_thread = JavaThread::cast(current);
+    ResourceMark rm(current_java_thread);
+    oop thread_oop = current_java_thread->vthread_or_thread();
+    const char* thread_name = thread_oop == nullptr ? current_java_thread->name() : JavaThread::name_for(thread_oop);
+
+    stream.print_cr("Humongous object allocation succeeded: thread=\"%s\" size=%zuB regions=%zu address=" PTR_FORMAT,
+                    thread_name,
+                    word_size * HeapWordSize,
+                    size_in_regions,
+                    p2i(result));
+    stream.print_cr("Java stack for humongous allocation:");
+    current_java_thread->print_active_stack_on(&stream);
+  } else {
+    ResourceMark rm(current);
+    stream.print_cr("Humongous object allocation succeeded: non_java_thread=\"%s\" size=%zuB regions=%zu address=" PTR_FORMAT,
+                    current->name(),
+                    word_size * HeapWordSize,
+                    size_in_regions,
+                    p2i(result));
+    stream.print_cr("Java stack for humongous allocation: unavailable for non-Java thread");
+  }
 }
 
 // If could fit into free regions w/o expansion, try.
@@ -680,11 +714,16 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
       if (result != nullptr) {
         policy()->old_gen_alloc_tracker()->
           add_allocated_humongous_bytes_since_last_gc(size_in_regions * G1HeapRegion::GrainBytes);
-        return result;
       }
 
       // Read the GC count while still holding the Heap_lock.
       gc_count_before = total_collections();
+    }
+
+    if (result != nullptr) {
+      size_t size_in_regions = humongous_obj_size_in_regions(word_size);
+      log_humongous_allocation(result, word_size, size_in_regions);
+      return result;
     }
 
     bool succeeded;
@@ -696,6 +735,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
         size_t size_in_regions = humongous_obj_size_in_regions(word_size);
         policy()->old_gen_alloc_tracker()->
           record_collection_pause_humongous_allocation(size_in_regions * G1HeapRegion::GrainBytes);
+        log_humongous_allocation(result, word_size, size_in_regions);
       }
       return result;
     }
