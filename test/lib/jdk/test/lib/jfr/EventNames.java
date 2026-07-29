@@ -220,6 +220,9 @@ public class EventNames {
     public static final String VirtualThreadEnd = PREFIX + "VirtualThreadEnd";
     public static final String VirtualThreadPinned = PREFIX + "VirtualThreadPinned";
     public static final String VirtualThreadSubmitFailed = PREFIX + "VirtualThreadSubmitFailed";
+    public static final String JavaNativeAllocation = PREFIX + "JavaNativeAllocation";
+    public static final String JavaNativeFree = PREFIX + "JavaNativeFree";
+    public static final String JavaNativeReallocate = PREFIX + "JavaNativeReallocate";
 
     // Containers
     public static final String ContainerConfiguration = PREFIX + "ContainerConfiguration";

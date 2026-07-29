@@ -25,6 +25,9 @@
 
 package jdk.internal.misc;
 
+import jdk.internal.event.JavaNativeAllocationEvent;
+import jdk.internal.event.JavaNativeFreeEvent;
+import jdk.internal.event.JavaNativeReallocateEvent;
 import jdk.internal.ref.Cleaner;
 import jdk.internal.vm.annotation.ForceInline;
 import jdk.internal.vm.annotation.IntrinsicCandidate;
@@ -633,10 +636,12 @@ public final class Unsafe {
             return 0;
         }
 
+        JavaNativeAllocationEvent event = beforeAllocateMemory(bytes);
         long p = allocateMemory0(bytes);
         if (p == 0) {
             throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
         }
+        afterAllocateMemory(event, p);
 
         return p;
     }
@@ -689,10 +694,12 @@ public final class Unsafe {
             return 0;
         }
 
+        JavaNativeReallocateEvent event = beforeReallocateMemory(address, bytes);
         long p = (address == 0) ? allocateMemory0(bytes) : reallocateMemory0(address, bytes);
         if (p == 0) {
             throw new OutOfMemoryError("Unable to allocate " + bytes + " bytes");
         }
+        afterReallocateMemory(event, p);
 
         return p;
     }
@@ -927,7 +934,9 @@ public final class Unsafe {
             return;
         }
 
+        JavaNativeFreeEvent event = beforeFreeMemory(address);
         freeMemory0(address);
+        afterFreeMemory(event);
     }
 
     /**
@@ -940,6 +949,99 @@ public final class Unsafe {
      */
     private void freeMemoryChecks(long address) {
         checkPointer(null, address);
+    }
+
+    /**
+     * Called before allocating native memory to create a jdk.JavaNativeAllocation event.
+     */
+    private static JavaNativeAllocationEvent beforeAllocateMemory(long bytes) {
+        try {
+            JavaNativeAllocationEvent event = new JavaNativeAllocationEvent();
+            if (event.isEnabled()) {
+                event.allocationSize = bytes;
+                event.begin();
+                return event;
+            }
+        } catch (OutOfMemoryError e) {
+            // Ignore JFR event allocation failure
+        }
+        return null;
+    }
+
+    /**
+     * Called after allocating native memory to commit the jdk.JavaNativeAllocation event.
+     */
+    private static void afterAllocateMemory(JavaNativeAllocationEvent event, long addr) {
+        if (event != null) {
+            try {
+                event.addr = addr;
+                event.commit();
+            } catch (OutOfMemoryError e) {
+                // Ignore JFR event allocation failure
+            }
+        }
+    }
+
+    /**
+     * Called before reallocating native memory to create a jdk.JavaNativeReallocate event.
+     */
+    private static JavaNativeReallocateEvent beforeReallocateMemory(long address, long bytes) {
+        try {
+            JavaNativeReallocateEvent event = new JavaNativeReallocateEvent();
+            if (event.isEnabled()) {
+                event.freeAddr = address;
+                event.allocationSize = bytes;
+                event.begin();
+                return event;
+            }
+        } catch (OutOfMemoryError e) {
+            // Ignore JFR event allocation failure
+        }
+        return null;
+    }
+
+    /**
+     * Called after reallocating native memory to commit the jdk.JavaNativeReallocate event.
+     */
+    private static void afterReallocateMemory(JavaNativeReallocateEvent event, long addr) {
+        if (event != null) {
+            try {
+                event.allocAddr = addr;
+                event.commit();
+            } catch (OutOfMemoryError e) {
+                // Ignore JFR event allocation failure
+            }
+        }
+    }
+
+    /**
+     * Called before releasing native memory to create a jdk.JavaNativeFree event.
+     */
+    private static JavaNativeFreeEvent beforeFreeMemory(long address) {
+        try {
+            JavaNativeFreeEvent event = new JavaNativeFreeEvent();
+            if (event.isEnabled()) {
+                event.addr = address;
+                event.begin();
+                return event;
+            }
+        } catch (OutOfMemoryError e) {
+            // Ignore JFR event allocation failure
+        }
+        return null;
+    }
+
+    /**
+     * Called after releasing native memory to commit the jdk.JavaNativeFree event.
+     */
+    private static void afterFreeMemory(JavaNativeFreeEvent event) {
+        if (event != null) {
+            try {
+                event.commit();
+            } catch (OutOfMemoryError e) {
+                // Ignore JFR event allocation failure
+            }
+        }
     }
 
     /**
