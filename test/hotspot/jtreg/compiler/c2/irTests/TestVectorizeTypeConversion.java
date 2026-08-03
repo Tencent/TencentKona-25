@@ -21,6 +21,12 @@
  * questions.
  */
 
+/*
+ * This file has been modified by Loongson Technology in 2023, These
+ * modifications are Copyright (c) 2023, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
 package compiler.c2.irTests;
 
 import compiler.lib.ir_framework.*;
@@ -33,7 +39,8 @@ import jdk.test.lib.Utils;
  * @bug 8283091
  * @summary Auto-vectorization enhancement for type conversion between different data sizes.
  * @requires (os.simpleArch == "x64" & vm.cpu.features ~= ".*avx2.*") | os.arch=="aarch64" |
-             (os.arch == "riscv64" & vm.cpu.features ~= ".*rvv.*")
+             (os.arch == "riscv64" & vm.cpu.features ~= ".*rvv.*") |
+             os.arch == "loongarch64"
  * @library /test/lib /
  * @run driver compiler.c2.irTests.TestVectorizeTypeConversion
  */

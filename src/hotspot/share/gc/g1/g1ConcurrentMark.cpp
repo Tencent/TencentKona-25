@@ -22,6 +22,12 @@
  *
  */
 
+/*
+ * This file has been modified by Loongson Technology in 2025, These
+ * modifications are Copyright (c) 2025, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
 #include "classfile/classLoaderData.hpp"
 #include "classfile/classLoaderDataGraph.hpp"
 #include "gc/g1/g1BarrierSet.hpp"
@@ -2599,6 +2605,11 @@ void G1CMTask::attempt_stealing() {
       // And since we're towards the end, let's totally drain the
       // local queue and global stack.
       drain_local_queue(false);
+#if defined(LOONGARCH64) && !defined(ZERO)
+      // Load of _age._fields._top in drain_local_queue must not pass
+      // the load of _age._fields._top in assert _task_queue->size().
+      DEBUG_ONLY(OrderAccess::loadload_for_sa();)
+#endif
       drain_global_stack(false);
     } else {
       break;
@@ -2889,6 +2900,11 @@ void G1CMTask::do_marking_step(double time_target_ms,
   // Since we've done everything else, we can now totally drain the
   // local queue and global stack.
   drain_local_queue(false);
+#if defined(LOONGARCH64) && !defined(ZERO)
+  // Load of _age._fields._top in drain_local_queue must not pass
+  // the load of _age._fields._top in assert _task_queue->size().
+  DEBUG_ONLY(OrderAccess::loadload_for_sa();)
+#endif
   drain_global_stack(false);
 
   // Attempt at work stealing from other task's queues.

@@ -22,6 +22,12 @@
  *
  */
 
+/*
+ * This file has been modified by Loongson Technology in 2022, These
+ * modifications are Copyright (c) 2022, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
 #include "classfile/javaClasses.inline.hpp"
 #include "classfile/vmSymbols.hpp"
 #include "code/codeCache.inline.hpp"
@@ -950,7 +956,7 @@ inline freeze_result FreezeBase::recurse_freeze_java_frame(const frame& f, frame
   _freeze_size += fsize;
   NOT_PRODUCT(_frames++;)
 
-  assert(FKind::frame_bottom(f) <= _bottom_address, "");
+  NOT_LOONGARCH64(assert(FKind::frame_bottom(f) <= _bottom_address, "");)
 
   // We don't use FKind::frame_bottom(f) == _bottom_address because on x64 there's sometimes an extra word between
   // enterSpecial and an interpreted frame
@@ -1817,7 +1823,7 @@ static freeze_result is_pinned0(JavaThread* thread, oop cont_scope, bool safepoi
   if (!safepoint) {
     f = f.sender(&map); // this is the yield frame
   } else { // safepoint yield
-#if (defined(X86) || defined(AARCH64) || defined(RISCV64)) && !defined(ZERO)
+#if (defined(X86) || defined(AARCH64) || defined(RISCV64) || defined(LOONGARCH64)) && !defined(ZERO)
     f.set_fp(f.real_fp()); // Instead of this, maybe in ContinuationWrapper::set_last_frame always use the real_fp?
 #else
     Unimplemented();
@@ -2611,8 +2617,8 @@ void ThawBase::recurse_thaw_compiled_frame(const frame& hf, frame& caller, int n
 
   // If we're the bottom-most thawed frame, we're writing to within one word from entrySP
   // (we might have one padding word for alignment)
-  assert(!is_bottom_frame || (_cont.entrySP() - 1 <= to + sz && to + sz <= _cont.entrySP()), "");
-  assert(!is_bottom_frame || hf.compiled_frame_stack_argsize() != 0 || (to + sz && to + sz == _cont.entrySP()), "");
+  NOT_LOONGARCH64(assert(!is_bottom_frame || (_cont.entrySP() - 1 <= to + sz && to + sz <= _cont.entrySP()), "");)
+  NOT_LOONGARCH64(assert(!is_bottom_frame || hf.compiled_frame_stack_argsize() != 0 || (to + sz && to + sz == _cont.entrySP()), "");)
 
   copy_from_chunk(from, to, sz); // copying good oops because we invoked barriers above
 

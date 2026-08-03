@@ -21,6 +21,12 @@
  * questions.
  */
 
+/*
+ * This file has been modified by Loongson Technology in 2023, These
+ * modifications are Copyright (c) 2023, Loongson Technology, and are made
+ * available on the same license terms set forth above.
+ */
+
 /**
  * @test
  * @bug 8259937
@@ -28,7 +34,7 @@
  *
  * @requires vm.flavor == "server"
  * @requires ((os.arch == "amd64" | os.arch == "x86_64") & sun.arch.data.model == "64") |
-              os.arch == "aarch64" | os.arch == "ppc64" | os.arch == "ppc64le" | os.arch == "riscv64"
+              os.arch == "aarch64" | os.arch == "ppc64" | os.arch == "ppc64le" | os.arch == "riscv64" | os.arch == "loongarch64"
  * @requires vm.gc.Shenandoah
  *
  * @run main/native/othervm --enable-native-access=ALL-UNNAMED -XX:+UnlockDiagnosticVMOptions
