@@ -320,7 +320,7 @@ public class VirtualMachineImpl extends HotSpotVirtualMachine {
     private static final String MASK  = "mask";
 
     // The length of Sig(Cgt) in some architecture is 32.
-    private static final Pattern SIGNAL_MASK_PATTERN = Pattern.compile("(?<" + FIELD + ">Sig\\p{Alpha}{3}):\\s+(?<" + MASK + ">\\p{XDigit}{16,32}).*");
+    private static final Pattern SIGNAL_MASK_PATTERN = Pattern.compile("(?<" + FIELD + ">Sig\\p{Alpha}{3}):\\s+(?<" + MASK + ">\\p{XDigit}{32}|\\p{XDigit}{16}).*");
 
     private static final long SIGQUIT = 0b100; // mask bit for SIGQUIT
 

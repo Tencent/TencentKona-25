@@ -33,7 +33,7 @@
  * @summary Change default DNS caching behavior for code not running under
  *          security manager.
  * @run main/othervm/timeout=200 -Djdk.net.hosts.file=DefaultCachingHosts
- *      -Dsun.net.inetaddr.ttl=24  DefaultCaching
+ *      -Dsun.net.inetaddr.ttl=20  DefaultCaching
  */
 import java.net.InetAddress;
 import java.net.UnknownHostException;
@@ -70,7 +70,7 @@ public class DefaultCaching {
         test("foo", "10.5.18.22", true, 5);
 
         // now delay to see if theclub has expired
-        sleep(9);
+        sleep(5);
 
         test("foo", "10.5.18.22", true, 5);
         test("theclub", "129.156.220.1", true, 6);

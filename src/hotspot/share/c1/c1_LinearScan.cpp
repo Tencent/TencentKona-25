@@ -3064,6 +3064,9 @@ void LinearScan::do_linear_scan() {
   NOT_PRODUCT(print_lir(2, "LIR after assignment of register numbers:"));
   NOT_PRODUCT(LinearScanStatistic::compute(this, _stat_after_asign));
 
+#if !defined(RISCV) && !defined(LOONGARCH)
+  // Disable these optimizations on riscv temporarily, because it does not
+  // work when the comparison operands are bound to branches or cmoves.
   { TIME_LINEAR_SCAN(timer_optimize_lir);
 
     EdgeMoveOptimizer::optimize(ir()->code());
@@ -3071,6 +3074,7 @@ void LinearScan::do_linear_scan() {
     // check that cfg is still correct after optimizations
     ir()->verify();
   }
+#endif
 
   NOT_PRODUCT(print_lir(1, "Before Code Generation", false));
   NOT_PRODUCT(LinearScanStatistic::compute(this, _stat_final));
